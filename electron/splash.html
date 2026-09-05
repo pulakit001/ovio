@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'" />
+  <title>Ovio</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #F6F3EC;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      user-select: none;
+      cursor: default;
+    }
+    .container {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      background: radial-gradient(120% 90% at 50% 0%, #FDFCF8 0%, #F6F3EC 100%);
+      border-radius: 22px;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(34,30,23,0.20);
+      transition: background 600ms ease;
+    }
+    /* Logo mark — Apple-style rounded squircle like app icons */
+    .logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 104px;
+      height: 104px;
+      border-radius: 24.5px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(34,30,23,0.18);
+      animation: fadeUp 500ms ease 80ms both;
+    }
+    .logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      border-radius: 24.5px;
+    }
+    .name {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      color: #221E17;
+      animation: fadeUp 500ms ease 150ms both;
+    }
+    .tagline {
+      font-size: 13px;
+      font-weight: 400;
+      color: #6B6355;
+      letter-spacing: 0.1px;
+      animation: fadeUp 500ms ease 280ms both;
+    }
+    .progress {
+      margin-top: 8px;
+      width: 160px;
+      height: 3px;
+      border-radius: 2px;
+      background: rgba(34,30,23,0.10);
+      overflow: hidden;
+      animation: fadeUp 500ms ease 400ms both;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 2px;
+      background: linear-gradient(90deg, #C9793F, #B4552D);
+      animation: load 1.1s ease forwards;
+    }
+    @keyframes load {
+      0% { width: 0%; }
+      60% { width: 78%; }
+      100% { width: 100%; }
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">
+      <img src="logo.png" alt="Ovio" />
+    </div>
+    <div class="name">Ovio</div>
+    <div class="tagline">Real-time transcription &amp; AI notes</div>
+    <div class="progress"><div class="progress-fill"></div></div>
+  </div>
+</body>
+</html>

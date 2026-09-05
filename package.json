@@ -1,0 +1,56 @@
+{
+  "name": "ovio",
+  "version": "1.0.0",
+  "description": "Real-time transcription & AI notes",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron:build": "vite build && electron-builder"
+  },
+  "dependencies": {
+    "lucide-react": "^0.460.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "whisper-cpp-node": "^0.2.12"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.0",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "vite": "^6.0.5",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.ovio.app",
+    "productName": "Ovio",
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "logo.png",
+      "build/icon/icon_1024.png"
+    ],
+    "mac": {
+      "icon": "build/icon",
+      "category": "public.app-category.productivity",
+      "identity": null,
+      "artifactName": "${productName}-${version}-mac.${ext}"
+    },
+    "dmg": {
+      "artifactName": "${productName}-${version}-mac.${ext}",
+      "writeUpdateInfo": false
+    },
+    "win": {
+      "icon": "logo.png"
+    },
+    "directories": {
+      "output": "release"
+    },
+    "asarUnpack": [
+      "**/whisper-cpp-node/**",
+      "**/*.node"
+    ]
+  }
+}
