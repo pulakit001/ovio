@@ -86,4 +86,4 @@ Electron · React 18 · Vite · whisper.cpp (local STT) · Groq / OpenRouter / O
 
 ---
 
-Built with ❤️ for people who take too many meetings and too few notes.
+Made with ❤️ by the team at **Snippetz Labs**

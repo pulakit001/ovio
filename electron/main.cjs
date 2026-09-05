@@ -15,7 +15,7 @@ const DOCK_ICON = path.join(__dirname, "..", "build", "icon", "icon_1024.png");
 function createSplash() {
   splashWindow = new BrowserWindow({
     width: 420,
-    height: 320,
+    height: 380,
     frame: false,
     transparent: true,
     resizable: false,
