@@ -19,6 +19,8 @@ import {
   RotateCw,
   Copy,
   Check,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import useTranscription from "./hooks/useTranscription";
 import useAutoNotes from "./hooks/useAutoNotes";
@@ -98,6 +100,38 @@ function IconButton({ onClick, children, title, small }) {
     >
       {children}
     </button>
+  );
+}
+
+// Inline rename input used for projects, subprojects and recordings.
+function InlineRenameRow({ initial, indent, onConfirm, onCancel }) {
+  const ref = useRef(null);
+  const doneRef = useRef(false);
+  const [value, setValue] = useState(initial);
+  useEffect(() => {
+    ref.current?.focus();
+    ref.current?.select();
+  }, []);
+  const finish = (fn) => {
+    if (doneRef.current) return;
+    doneRef.current = true;
+    fn();
+  };
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6, padding: `3px 10px 3px ${indent}px` }}>
+      <input
+        ref={ref}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") finish(() => onConfirm(value.trim()));
+          if (e.key === "Escape") finish(onCancel);
+        }}
+        onBlur={() => finish(() => { const v = value.trim(); if (v) onConfirm(v); else onCancel(); })}
+        style={{ flex: 1, border: `1px solid ${COLORS.borderStrong}`, outline: "none", fontSize: 12.5, fontFamily: FONT, color: COLORS.text, background: COLORS.surface, borderRadius: 6, padding: "4px 8px" }}
+      />
+    </div>
   );
 }
 
@@ -503,6 +537,8 @@ export default function MacNoteTaker({
   const [aiMessages, setAiMessages] = useState([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [editingLabel, setEditingLabel] = useState(false);
+  const [renamingItem, setRenamingItem] = useState(null); // { kind: "project"|"subproject"|"recording", pid, sid, id }
+  const [hoveredId, setHoveredId] = useState(null);
   const [autoScroll, setAutoScroll] = useState(true);
 
   const elapsedRef = useRef(0);
@@ -749,6 +785,77 @@ export default function MacNoteTaker({
     setSelectedSubprojectId(subprojectId);
   };
 
+  // ---- Rename & delete (projects, subprojects, recordings) ----
+  const startRename = (item) => setRenamingItem(item);
+
+  const commitRename = (name) => {
+    const item = renamingItem;
+    setRenamingItem(null);
+    const clean = (name || "").trim();
+    if (!item || !clean) return;
+    if (item.kind === "project") {
+      setProjects((prev) => prev.map((p) => (p.id === item.id ? { ...p, name: clean } : p)));
+    } else if (item.kind === "subproject") {
+      setProjects((prev) =>
+        prev.map((p) =>
+          p.id !== item.pid
+            ? p
+            : { ...p, subprojects: p.subprojects.map((s) => (s.id === item.id ? { ...s, name: clean } : s)) }
+        )
+      );
+    } else if (item.kind === "recording") {
+      setRecordingsBySub((prev) => ({
+        ...prev,
+        [item.sid]: (prev[item.sid] || []).map((r) => (r.id === item.id ? { ...r, label: clean } : r)),
+      }));
+    }
+  };
+
+  const clearSelectionIfRemoved = (sid) => {
+    if (selectedSubprojectId === sid) {
+      setActiveRecordingId(null);
+      setIsRecording(false);
+      stopTranscription();
+      setSelectedSubprojectId(null);
+    }
+  };
+
+  const removeProject = (pid) => {
+    const proj = projects.find((p) => p.id === pid);
+    const subIds = (proj?.subprojects || []).map((s) => s.id);
+    if (!window.confirm(`Delete project "${proj?.name}" with all its subprojects and recordings?`)) return;
+    setProjects((prev) => prev.filter((p) => p.id !== pid));
+    setRecordingsBySub((prev) => {
+      const next = { ...prev };
+      subIds.forEach((id) => delete next[id]);
+      return next;
+    });
+    subIds.forEach((id) => clearSelectionIfRemoved(id));
+  };
+
+  const removeSubproject = (pid, sid) => {
+    const sub = projects.find((p) => p.id === pid)?.subprojects.find((s) => s.id === sid);
+    if (!window.confirm(`Delete subproject "${sub?.name}" with all its recordings?`)) return;
+    setProjects((prev) =>
+      prev.map((p) => (p.id !== pid ? p : { ...p, subprojects: p.subprojects.filter((s) => s.id !== sid) }))
+    );
+    setRecordingsBySub((prev) => {
+      const next = { ...prev };
+      delete next[sid];
+      return next;
+    });
+    clearSelectionIfRemoved(sid);
+  };
+
+  const removeRecording = (sid, rid) => {
+    if (!window.confirm("Delete this recording with its transcript, notes and AI summary?")) return;
+    setRecordingsBySub((prev) => ({ ...prev, [sid]: (prev[sid] || []).filter((r) => r.id !== rid) }));
+    if (activeRecordingId === rid) {
+      setActiveRecordingId(null);
+      stopTranscription();
+    }
+  };
+
   const openRecording = (rec) => {
     // Never leak a running session into a different recording.
     if (isRecording) stopRecording();
@@ -859,6 +966,11 @@ export default function MacNoteTaker({
                 {projects.map((p) => (
                   <div key={p.id}>
                     {/* Project (folder) row */}
+                    {renamingItem?.kind === "project" && renamingItem.id === p.id ? (
+                      <div style={{ padding: "2px 0" }}>
+                        <InlineRenameRow initial={p.name} indent={8} onConfirm={commitRename} onCancel={() => setRenamingItem(null)} />
+                      </div>
+                    ) : (
                     <div
                       onClick={() => setExpanded((prev) => ({ ...prev, [p.id]: !prev[p.id] }))}
                       title={p.name}
@@ -867,40 +979,59 @@ export default function MacNoteTaker({
                         padding: "5px 8px", cursor: "pointer", borderRadius: 6,
                         height: 26,
                       }}
-                      onMouseEnter={(e) => { if (!expanded[p.id]) e.currentTarget.style.background = "#E8E2D6"; }}
-                      onMouseLeave={(e) => { if (!expanded[p.id]) e.currentTarget.style.background = "transparent"; }}
+                      onMouseEnter={(e) => { setHoveredId(p.id); if (!expanded[p.id]) e.currentTarget.style.background = "#E8E2D6"; }}
+                      onMouseLeave={(e) => { setHoveredId(null); if (!expanded[p.id]) e.currentTarget.style.background = "transparent"; }}
                     >
                       <ChevronRight size={13} color={COLORS.textTertiary} style={{ transition: "transform 150ms ease", transform: expanded[p.id] ? "rotate(90deg)" : "rotate(0deg)" }} />
                       <Folder size={15} color={COLORS.blue} strokeWidth={1.8} style={{ fill: "none" }} />
                       <span style={{ fontSize: 13, color: COLORS.text, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 500 }}>{p.name}</span>
+                      {hoveredId === p.id && (
+                        <IconButton onClick={(e) => { e.stopPropagation(); startRename({ kind: "project", id: p.id }); }} title="Rename project" small><Pencil size={11} /></IconButton>
+                      )}
+                      {hoveredId === p.id && (
+                        <IconButton onClick={(e) => { e.stopPropagation(); removeProject(p.id); }} title="Delete project" small><Trash2 size={11} /></IconButton>
+                      )}
                       <IconButton onClick={(e) => { e.stopPropagation(); setExpanded((prev) => ({ ...prev, [p.id]: true })); setCreatingSubFor(p.id); }} title="New subproject" small><Plus size={12} /></IconButton>
                     </div>
+                    )}
 
                     {/* Subprojects */}
                     {expanded[p.id] && (
                       <div style={{ marginTop: 1 }}>
                         <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
                           {p.subprojects.map((s) => (
-                            <div
-                              key={s.id}
-                              onClick={() => selectSubproject(p.id, s.id)}
-                              title={s.name}
-                              style={{
-                                display: "flex", alignItems: "center", gap: 6,
-                                padding: "5px 8px", marginLeft: 16, borderRadius: 6,
-                                cursor: "pointer", height: 24,
-                                background: selectedSubprojectId === s.id ? COLORS.blue : "transparent",
-                              }}
-                              onMouseEnter={(e) => { if (selectedSubprojectId !== s.id) e.currentTarget.style.background = "#E4DED2"; }}
-                              onMouseLeave={(e) => { if (selectedSubprojectId !== s.id) e.currentTarget.style.background = "transparent"; }}
-                            >
-                              <Disc size={13} color={selectedSubprojectId === s.id ? "#FFFFFF" : COLORS.textTertiary} strokeWidth={1.8} />
-                              <span style={{
-                                fontSize: 12.5,
-                                color: selectedSubprojectId === s.id ? "#FFFFFF" : COLORS.text,
-                                flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                              }}>{s.name}</span>
-                            </div>
+                            renamingItem?.kind === "subproject" && renamingItem.id === s.id ? (
+                              <div key={s.id} style={{ marginLeft: 16, padding: "2px 0" }} onClick={(e) => e.stopPropagation()}>
+                                <InlineRenameRow initial={s.name} indent={8} onConfirm={commitRename} onCancel={() => setRenamingItem(null)} />
+                              </div>
+                            ) : (
+                              <div
+                                key={s.id}
+                                onClick={() => selectSubproject(p.id, s.id)}
+                                title={s.name}
+                                style={{
+                                  display: "flex", alignItems: "center", gap: 6,
+                                  padding: "5px 8px", marginLeft: 16, borderRadius: 6,
+                                  cursor: "pointer", height: 24,
+                                  background: selectedSubprojectId === s.id ? COLORS.blue : "transparent",
+                                }}
+                                onMouseEnter={(e) => { setHoveredId(s.id); if (selectedSubprojectId !== s.id) e.currentTarget.style.background = "#E4DED2"; }}
+                                onMouseLeave={(e) => { setHoveredId(null); if (selectedSubprojectId !== s.id) e.currentTarget.style.background = "transparent"; }}
+                              >
+                                <Disc size={13} color={selectedSubprojectId === s.id ? "#FFFFFF" : COLORS.textTertiary} strokeWidth={1.8} />
+                                <span style={{
+                                  fontSize: 12.5,
+                                  color: selectedSubprojectId === s.id ? "#FFFFFF" : COLORS.text,
+                                  flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                                }}>{s.name}</span>
+                                {hoveredId === s.id && (
+                                  <IconButton onClick={(e) => { e.stopPropagation(); startRename({ kind: "subproject", pid: p.id, id: s.id }); }} title="Rename subproject" small><Pencil size={11} /></IconButton>
+                                )}
+                                {hoveredId === s.id && (
+                                  <IconButton onClick={(e) => { e.stopPropagation(); removeSubproject(p.id, s.id); }} title="Delete subproject" small><Trash2 size={11} /></IconButton>
+                                )}
+                              </div>
+                            )
                           ))}
                         </div>
                         {creatingSubFor === p.id && (
@@ -954,15 +1085,27 @@ export default function MacNoteTaker({
                   {currentRecordings.map((rec) => (
                     <div key={rec.id} onClick={() => openRecording(rec)}
                       style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 10, cursor: "pointer" }}
-                      onMouseEnter={(e) => (e.currentTarget.style.borderColor = COLORS.borderStrong)}
-                      onMouseLeave={(e) => (e.currentTarget.style.borderColor = COLORS.border)}>
+                      onMouseEnter={(e) => { setHoveredId(rec.id); e.currentTarget.style.borderColor = COLORS.borderStrong; }}
+                      onMouseLeave={(e) => { setHoveredId(null); e.currentTarget.style.borderColor = COLORS.border; }}>
                       <div style={{ width: 34, height: 34, borderRadius: 999, background: "#EFE9DC", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         <Disc size={15} color={COLORS.textSecondary} />
                       </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13.5, fontWeight: 500, color: COLORS.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rec.label}</div>
-                        <div style={{ fontSize: 12, color: COLORS.textTertiary, marginTop: 1 }}>{formatDate(rec.createdAt)}</div>
-                      </div>
+                      {renamingItem?.kind === "recording" && renamingItem.id === rec.id ? (
+                        <div style={{ flex: 1, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
+                          <InlineRenameRow initial={rec.label} indent={0} onConfirm={commitRename} onCancel={() => setRenamingItem(null)} />
+                        </div>
+                      ) : (
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13.5, fontWeight: 500, color: COLORS.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rec.label}</div>
+                          <div style={{ fontSize: 12, color: COLORS.textTertiary, marginTop: 1 }}>{formatDate(rec.createdAt)}</div>
+                        </div>
+                      )}
+                      {hoveredId === rec.id && renamingItem?.id !== rec.id && (
+                        <>
+                          <IconButton onClick={(e) => { e.stopPropagation(); startRename({ kind: "recording", sid: selectedSubprojectId, id: rec.id }); }} title="Rename recording" small><Pencil size={12} /></IconButton>
+                          <IconButton onClick={(e) => { e.stopPropagation(); removeRecording(selectedSubprojectId, rec.id); }} title="Delete recording" small><Trash2 size={12} /></IconButton>
+                        </>
+                      )}
                       <div style={{ fontSize: 12, color: COLORS.textTertiary, fontVariantNumeric: "tabular-nums" }}>{formatTime(rec.duration || 0)}</div>
                     </div>
                   ))}
