@@ -2,6 +2,12 @@
 
 **Real-time transcription & AI-powered study notes — right on your Mac.**
 
+<p align="center">
+  <img src="assets/app-screenshot.png" alt="Ovio — live recorder with AI summary and chat" width="100%" />
+  <br/>
+  <em>Live recorder with a structured AI summary and the in-recording chat — ask "what is the argument?" and get a grounded answer.</em>
+</p>
+
 Ovio records your meetings, lectures, and conversations, transcribes them live, and turns them into a deep, well-structured AI summary you can actually study from. Ask the built-in chat anything about the recording — it answers from your transcript, in short and clear replies.
 
 ---
