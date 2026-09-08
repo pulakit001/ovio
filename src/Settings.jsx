@@ -11,6 +11,17 @@ function genId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
+// Attach display/status fields (mask + hasKey) so KeyRow can show whether a
+// key actually holds a value instead of always rendering "no key".
+function withKeyStatus(k) {
+  const key = k.key || "";
+  return {
+    ...k,
+    hasKey: !!key,
+    masked: key ? `${key.slice(0, 4)}...${key.slice(-4)}` : "",
+  };
+}
+
 function KeyRow({ entry, provider, onUpdate, onRemove, onToggle }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState("");
@@ -82,6 +93,7 @@ export default function Settings({ onClose, mode, setMode, sttModel, setSttModel
   const [newGroq, setNewGroq] = useState("");
   const [newOr, setNewOr] = useState("");
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [ollamaStatus, setOllamaStatus] = useState(null);
   const [checkingOllama, setCheckingOllama] = useState(false);
   const fileInputRef = { current: null };
@@ -89,8 +101,8 @@ export default function Settings({ onClose, mode, setMode, sttModel, setSttModel
   const refreshKeys = async () => {
     if (window.settingsAPI) {
       const plain = await window.settingsAPI.getPlain();
-      setGroqKeys(plain.groqKeys || []);
-      setOpenrouterKeys(plain.openrouterKeys || []);
+      setGroqKeys((plain.groqKeys || []).map(withKeyStatus));
+      setOpenrouterKeys((plain.openrouterKeys || []).map(withKeyStatus));
     }
     setLoadingKeys(false);
   };
@@ -135,22 +147,33 @@ export default function Settings({ onClose, mode, setMode, sttModel, setSttModel
   };
 
   const save = async () => {
-    await window.settingsAPI.update({
-      mode: mode ?? "hybrid",
-      sttModel: sttModel ?? "whisper-large-v3-turbo",
-      localSttModel: localSttModel ?? "turbo",
-      agentSkills,
-      aiProvider: aiProvider ?? "cloud",
-      ollamaUrl: ollamaUrl ?? "http://localhost:11434",
-      ollamaModel: ollamaModel ?? "",
-    });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+    try {
+      const res = await window.settingsAPI.update({
+        mode: mode ?? "hybrid",
+        sttModel: sttModel ?? "whisper-large-v3-turbo",
+        localSttModel: localSttModel ?? "turbo",
+        agentSkills,
+        aiProvider: aiProvider ?? "cloud",
+        ollamaUrl: ollamaUrl ?? "http://localhost:11434",
+        ollamaModel: ollamaModel ?? "",
+      });
+      if (!res || res.ok === false) throw new Error(res?.error || "Failed to save settings");
+      setSaveError("");
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1500);
+      // Re-sync the running app (context settings) with what was just saved so
+      // the new mode / provider takes effect immediately.
+      onKeysChanged?.();
+    } catch (err) {
+      setSaved(false);
+      setSaveError(err.message || "Failed to save settings");
+    }
   };
 
   const addGroq = async () => {
     if (!newGroq.trim()) return;
-    const updated = [...groqKeys, { id: genId(), name: `Key ${groqKeys.length + 1}`, active: true, key: newGroq.trim() }];
+    const entry = withKeyStatus({ id: genId(), name: `Key ${groqKeys.length + 1}`, active: true, key: newGroq.trim() });
+    const updated = [...groqKeys, entry];
     await window.settingsAPI.update({ groqKeys: updated.map((k) => ({ id: k.id, name: k.name, active: k.active, key: k.key })) });
     setGroqKeys(updated);
     setShowAddGroq(false);
@@ -160,7 +183,8 @@ export default function Settings({ onClose, mode, setMode, sttModel, setSttModel
 
   const addOr = async () => {
     if (!newOr.trim()) return;
-    const updated = [...openrouterKeys, { id: genId(), name: `Key ${openrouterKeys.length + 1}`, active: true, key: newOr.trim() }];
+    const entry = withKeyStatus({ id: genId(), name: `Key ${openrouterKeys.length + 1}`, active: true, key: newOr.trim() });
+    const updated = [...openrouterKeys, entry];
     await window.settingsAPI.update({ openrouterKeys: updated.map((k) => ({ id: k.id, name: k.name, active: k.active, key: k.key })) });
     setOpenrouterKeys(updated);
     setShowAddOr(false);
@@ -291,7 +315,7 @@ export default function Settings({ onClose, mode, setMode, sttModel, setSttModel
           </div>
           {aiProvider === "cloud" && (
             <div style={{ fontSize: 11, color: COLORS.textTertiary, marginTop: 6 }}>
-              Cloud first — if all keys fail, a local Ollama model is used as a last-resort fallback.
+              Cloud first — if a configured cloud key fails, the error is shown instead of quietly using local AI.
             </div>
           )}
           {aiProvider === "ollama" && (
@@ -491,7 +515,8 @@ export default function Settings({ onClose, mode, setMode, sttModel, setSttModel
         </div>
 
         {/* Save */}
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, paddingTop: 14, borderTop: `1px solid ${COLORS.border}` }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, marginTop: 8, paddingTop: 14, borderTop: `1px solid ${COLORS.border}` }}>
+          {saveError && <span style={{ fontSize: 11.5, color: COLORS.red, marginRight: "auto" }}>{saveError}</span>}
           {saved && <span style={{ fontSize: 12, color: COLORS.green, display: "flex", alignItems: "center", gap: 4 }}><Check size={13} /> Saved</span>}
           <button onClick={save} style={{ border: "none", background: COLORS.blue, color: "#fff", fontSize: 12.5, fontWeight: 600, borderRadius: 8, padding: "8px 20px", cursor: "pointer", fontFamily: FONT, letterSpacing: -0.1 }}>
             Save

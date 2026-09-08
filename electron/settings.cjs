@@ -82,12 +82,13 @@ function loadSettings() {
 }
 
 function persistSettings(settings) {
-  // Strip plaintext key values before caching or writing to disk — only the
-  // encrypted keyEnc blobs are ever allowed to be stored.
+  // Strip plaintext key values and derived display fields before caching or
+  // writing to disk — only the encrypted keyEnc blobs are ever allowed to be
+  // stored.
   const clean = {
     ...settings,
-    groqKeys: (settings.groqKeys || []).map(({ key, ...rest }) => rest),
-    openrouterKeys: (settings.openrouterKeys || []).map(({ key, ...rest }) => rest),
+    groqKeys: (settings.groqKeys || []).map(({ key, hasKey, masked, ...rest }) => rest),
+    openrouterKeys: (settings.openrouterKeys || []).map(({ key, hasKey, masked, ...rest }) => rest),
   };
   cache = clean;
   try {
@@ -137,12 +138,26 @@ function mergeProviderKeys(prevKeys, patchedKeys) {
   });
 }
 
+function plainKeyEntry(k) {
+  const key = decrypt(k.keyEnc);
+  return {
+    id: k.id,
+    name: k.name,
+    active: k.active,
+    key,
+    // Derived display/status fields so the renderer can show whether a key
+    // actually exists and a usable mask, without ever receiving keyEnc.
+    hasKey: !!key,
+    masked: key ? `${key.slice(0, 4)}...${key.slice(-4)}` : "",
+  };
+}
+
 function getPlainSettings() {
   const s = loadSettings();
   return {
     ...s,
-    groqKeys: (s.groqKeys || []).map((k) => ({ ...k, key: decrypt(k.keyEnc) })),
-    openrouterKeys: (s.openrouterKeys || []).map((k) => ({ ...k, key: decrypt(k.keyEnc) })),
+    groqKeys: (s.groqKeys || []).map(plainKeyEntry),
+    openrouterKeys: (s.openrouterKeys || []).map(plainKeyEntry),
   };
 }
 
@@ -153,8 +168,8 @@ function registerSettingsIpc() {
     const s = getPlainSettings();
     return {
       ...s,
-      groqKeys: (s.groqKeys || []).map((k) => ({ id: k.id, name: k.name, active: k.active, key: k.key })),
-      openrouterKeys: (s.openrouterKeys || []).map((k) => ({ id: k.id, name: k.name, active: k.active, key: k.key })),
+      groqKeys: (s.groqKeys || []).map((k) => ({ id: k.id, name: k.name, active: k.active, key: k.key, hasKey: k.hasKey, masked: k.masked })),
+      openrouterKeys: (s.openrouterKeys || []).map((k) => ({ id: k.id, name: k.name, active: k.active, key: k.key, hasKey: k.hasKey, masked: k.masked })),
     };
   });
 

@@ -38,6 +38,7 @@ export function SettingsProvider({ children }) {
         setSettings({
           mode: s.mode || "hybrid",
           sttModel: s.sttModel || "whisper-large-v3-turbo",
+          localSttModel: s.localSttModel || "turbo",
           onboardingComplete: !!s.onboardingComplete,
           onboardingSkipped: !!s.onboardingSkipped,
           groqKeys: s.groqKeys || [],
@@ -55,6 +56,7 @@ export function SettingsProvider({ children }) {
         setSettings({
           mode: "hybrid",
           sttModel: "whisper-large-v3-turbo",
+          localSttModel: "turbo",
           onboardingComplete: true,
           onboardingSkipped: false,
           groqKeys: [],
@@ -69,6 +71,7 @@ export function SettingsProvider({ children }) {
       setSettings({
         mode: "hybrid",
         sttModel: "whisper-large-v3-turbo",
+        localSttModel: "turbo",
         onboardingComplete: true,
         onboardingSkipped: false,
         groqKeys: [],
@@ -104,16 +107,18 @@ export function SettingsProvider({ children }) {
     []
   );
 
+  // Only keys with actual (decrypted) key material count as usable — a stored
+  // entry whose value could not be decrypted must not be treated as a key.
   const getActiveGroqKeys = useCallback(() => {
-    return actualKeys.groqKeys.filter((k) => k.active || k.active === undefined);
+    return actualKeys.groqKeys.filter((k) => (k.active || k.active === undefined) && k.key);
   }, [actualKeys]);
 
   const getActiveOpenRouterKeys = useCallback(() => {
-    return actualKeys.openrouterKeys.filter((k) => k.active || k.active === undefined);
+    return actualKeys.openrouterKeys.filter((k) => (k.active || k.active === undefined) && k.key);
   }, [actualKeys]);
 
   const hasAnyKey = useCallback(() => {
-    return actualKeys.groqKeys.length > 0 || actualKeys.openrouterKeys.length > 0;
+    return actualKeys.groqKeys.some((k) => k.key) || actualKeys.openrouterKeys.some((k) => k.key);
   }, [actualKeys]);
 
   return (

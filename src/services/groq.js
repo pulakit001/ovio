@@ -54,7 +54,21 @@ export async function completeWithFallback(groqKeys, openrouterKeys, messages, o
   } else if (aiProvider === "ollama") {
     result = (await tryOllama()) || (await tryCloud());
   } else {
-    result = (await tryCloud()) || (await tryOllama());
+    // Cloud first. If cloud keys ARE configured but every one of them failed,
+    // surface the errors instead of silently falling back to Ollama — a silent
+    // local fallback makes it look like the cloud setting "reverted" to local
+    // AI with no explanation. The Ollama fallback only applies when no cloud
+    // keys are configured at all.
+    const cloudConfigured =
+      (groqKeys || []).some((k) => k?.key) || (openrouterKeys || []).some((k) => k?.key);
+    const cloudResult = await tryCloud();
+    if (cloudResult) {
+      result = cloudResult;
+    } else if (cloudConfigured) {
+      throw new Error(errors.length ? errors.join("\n") : "All cloud API keys failed");
+    } else {
+      result = await tryOllama();
+    }
   }
 
   if (result) return result;

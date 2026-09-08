@@ -69,9 +69,18 @@ async function groqChat(apiKey, messages, { system, maxTokens = 4096, temperatur
 }
 
 async function groqChatWithRetry(apiKeys, messages, opts) {
-  if (!apiKeys || apiKeys.length === 0) throw new Error("No active Groq API keys configured");
+  // Ignore entries with no usable key material (e.g. a stored key that could
+  // not be decrypted) so the error message is actionable.
+  const keys = (apiKeys || []).filter((k) => k && k.key);
+  if (keys.length === 0) {
+    throw new Error(
+      (apiKeys || []).length > 0
+        ? "Groq keys are saved but their values could not be read — re-add the key in Settings"
+        : "No active Groq API keys configured"
+    );
+  }
   const errors = [];
-  for (const k of apiKeys) {
+  for (const k of keys) {
     try {
       const result = await groqChat(k.key, messages, opts);
       return { text: result, provider: "groq", keyName: k.name || "Groq" };
