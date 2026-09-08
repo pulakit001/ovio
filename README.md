@@ -50,8 +50,21 @@ npm run electron:dev
 npm run electron:build
 ```
 
-> **First launch of the packaged app:** macOS Gatekeeper will warn about an unsigned app.
-> Right-click the app → **Open** → **Open** to allow it once.
+> **First launch of the downloaded app (unsigned build):** macOS Gatekeeper shows
+> *"Apple could not verify Ovio is free of malware."* The app is safe — it just
+> isn't signed with a paid Apple Developer certificate. Allow it once:
+>
+> 1. Click **Done** on the warning (don't click "Move to Trash").
+> 2. Open **System Settings → Privacy & Security**, scroll to the bottom, and
+>    click **Open Anyway** next to "Ovio was blocked", then **Open**.
+>
+> Or from Terminal: `xattr -cr /Applications/Ovio.app`
+>
+> Note: right-click → Open alone is no longer enough on macOS Sequoia+; the
+> "Open Anyway" button in Privacy & Security is the reliable path. Releases
+> become warning-free once signed with a Developer ID certificate and
+> notarized — `build/afterSign.cjs` handles that automatically whenever a
+> certificate and notarization credentials are present.
 
 > **Local STT models** are not bundled to keep the download small. Grab them in
 > **Settings → Local STT Model** (Small ≈ 466 MB, Turbo ≈ 1.6 GB, Large ≈ 3.1 GB).
