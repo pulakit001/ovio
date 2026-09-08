@@ -31,41 +31,66 @@ async function fetchWithRetry(url, options, { retries = 2, baseDelayMs = 1200 } 
   throw lastErr;
 }
 
+/**
+ * Strip <think>…</think> blocks that reasoning models (deepseek-r1, qwen3, …)
+ * leak into their output.
+ */
+function stripThink(text) {
+  return (text || "").replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+}
+
 async function groqChat(apiKey, messages, { system, maxTokens = 4096, temperature = 0.3 } = {}) {
   if (!apiKey) throw new Error("Missing Groq API key");
 
-  const body = {
-    model: GROQ_MODEL,
-    messages: [...(system ? [{ role: "system", content: system }] : []), ...messages],
-    temperature,
-    max_tokens: maxTokens,
-  };
+  // gpt-oss models are REASONING models: with default settings they can spend
+  // the entire token budget on hidden reasoning and return EMPTY content
+  // (finish_reason "length"). reasoning_effort "low" keeps the visible answer
+  // first, and the retry below doubles the budget if reasoning still eats it.
+  let budget = maxTokens;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const body = {
+      model: GROQ_MODEL,
+      messages: [...(system ? [{ role: "system", content: system }] : []), ...messages],
+      temperature,
+      max_tokens: budget,
+      reasoning_effort: "low",
+    };
 
-  let res;
-  try {
-    res = await fetchWithRetry(`${GROQ_BASE}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(body),
-    });
-  } catch (err) {
-    if (err && err.status && err.res) {
-      const text = await err.res.text().catch(() => "");
-      throw new Error(`Groq error ${err.status} (after retries): ${text}`);
+    let res;
+    try {
+      res = await fetchWithRetry(`${GROQ_BASE}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      if (err && err.status && err.res) {
+        const text = await err.res.text().catch(() => "");
+        throw new Error(`Groq error ${err.status} (after retries): ${text}`);
+      }
+      throw new Error(`Groq request failed: ${err?.message || err}`);
     }
-    throw new Error(`Groq request failed: ${err?.message || err}`);
-  }
 
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Groq error ${res.status}: ${err}`);
-  }
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Groq error ${res.status}: ${err}`);
+    }
 
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content || "";
+    const data = await res.json();
+    const text = stripThink(data.choices?.[0]?.message?.content || "");
+    if (text.trim()) return text;
+    // Empty content with a length finish = reasoning ate the budget.
+    // One retry with a doubled budget before giving up.
+    if (data.choices?.[0]?.finish_reason === "length" && budget < 16000) {
+      budget = Math.min(budget * 2, 16000);
+      continue;
+    }
+    return "";
+  }
+  return "";
 }
 
 async function groqChatWithRetry(apiKeys, messages, opts) {
@@ -83,6 +108,9 @@ async function groqChatWithRetry(apiKeys, messages, opts) {
   for (const k of keys) {
     try {
       const result = await groqChat(k.key, messages, opts);
+      // An empty response is a failure, not a success — let the next key (or
+      // the next provider in the fallback chain) take over.
+      if (!result || !result.trim()) throw new Error("Groq returned an empty response");
       return { text: result, provider: "groq", keyName: k.name || "Groq" };
     } catch (err) {
       errors.push(`${k.name || "Groq"}: ${err.message}`);

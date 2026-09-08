@@ -173,6 +173,14 @@ export default function Settings({ onClose, mode, setMode, sttModel, setSttModel
     }
   };
 
+  // Adding a cloud key while "Fully Local" is selected means the user expects
+  // their key to actually be used — switch to cloud (Ollama stays available as
+  // the no-key fallback). Previously the provider silently stayed localOnly,
+  // so notes and chat ignored the brand-new key and "kept failing".
+  const switchToCloudIfLocal = () => {
+    if ((aiProvider || "cloud") === "localOnly") setAiProvider?.("cloud");
+  };
+
   const addGroq = async () => {
     if (!newGroq.trim()) return;
     const entry = withKeyStatus({ id: genId(), name: `Key ${groqKeys.length + 1}`, active: true, key: newGroq.trim() });
@@ -181,6 +189,7 @@ export default function Settings({ onClose, mode, setMode, sttModel, setSttModel
     setGroqKeys(updated);
     setShowAddGroq(false);
     setNewGroq("");
+    switchToCloudIfLocal();
     onKeysChanged?.();
   };
 
@@ -192,6 +201,7 @@ export default function Settings({ onClose, mode, setMode, sttModel, setSttModel
     setOpenrouterKeys(updated);
     setShowAddOr(false);
     setNewOr("");
+    switchToCloudIfLocal();
     onKeysChanged?.();
   };
 

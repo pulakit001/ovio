@@ -17,6 +17,14 @@ export function normalizeOllamaUrl(url) {
 }
 
 /**
+ * Strip <think>…</think> blocks that reasoning models (deepseek-r1, qwen3, …)
+ * leak into their output.
+ */
+export function stripThink(text) {
+  return (text || "").replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+}
+
+/**
  * Check that the Ollama daemon is reachable and gather installed models.
  * Returns { ok, models: [{ id, name, size }], url } on success,
  * or { ok: false, error } on failure. Aborts quickly (2.5s) so the UI
@@ -74,7 +82,9 @@ export async function ollamaChat(url, model, messages, { system, maxTokens = 409
     keep_alive: "30m",
     options: {
       temperature,
-      num_predict: maxTokens,
+      // Cap the output budget: 8k predicted tokens on a 30B local model takes
+      // far longer than anyone will wait — 4096 still yields full-length notes.
+      num_predict: Math.min(maxTokens || 4096, 4096),
       num_ctx: 8192, // long transcripts need more room than the 2048 default
     },
   };
@@ -98,7 +108,11 @@ export async function ollamaChat(url, model, messages, { system, maxTokens = 409
       }
 
       const data = await res.json();
-      return data.message?.content || "";
+      // Thinking models (deepseek-r1, qwen3, …) may wrap the answer in
+      // <think>…</think> tags — strip it, and treat an empty answer as a failure.
+      const text = stripThink(data.message?.content || "");
+      if (!text.trim()) throw new Error("model returned an empty response");
+      return text;
     } catch (err) {
       lastErr = err;
       const aborted = err?.name === "AbortError";
@@ -121,35 +135,61 @@ export async function ollamaChat(url, model, messages, { system, maxTokens = 409
 }
 
 /**
- * Try the configured model first; if none is configured (or it fails),
- * fall back to whatever models are installed locally.
+ * Try the configured model first; if it fails or isn't installed, discover
+ * whatever models are installed locally and try those (general instruct
+ * models before coder/r1/specialist ones, smaller before larger).
  * Returns { text, provider, keyName } like the cloud providers do.
  */
+function rankLocalModel(id) {
+  // Coder and reasoning models are poor at long-form note writing and slow;
+  // "-cloud" models require a paid Ollama account and can't run locally.
+  if (/-cloud$/i.test(id)) return 2;
+  if (/coder|deepseek-r1|qwq|-think/i.test(id)) return 1;
+  return 0;
+}
+
 export async function ollamaChatWithRetry(ollamaCfg, messages, opts = {}) {
   const url = normalizeOllamaUrl(ollamaCfg?.url);
   const errors = [];
-  const candidates = [];
+  const attempted = new Set();
 
-  if (ollamaCfg?.model) candidates.push(ollamaCfg.model);
-
-  if (candidates.length === 0) {
-    const status = await checkOllama(url);
-    if (status.ok && status.models.length > 0) {
-      candidates.push(...status.models.map((m) => m.id));
-    } else {
-      throw new Error(status.error || "Ollama is not reachable or has no models installed");
-    }
-  }
-
-  for (const model of [...new Set(candidates)]) {
+  const tryModel = async (model) => {
+    if (!model || attempted.has(model)) return null;
+    attempted.add(model);
     try {
       const text = await ollamaChat(url, model, messages, opts);
       return { text, provider: "ollama", keyName: `Ollama (${model})` };
     } catch (err) {
       errors.push(`Ollama ${model}: ${err.message}`);
+      return null;
     }
+  };
+
+  // 1. The user's configured model gets the first shot.
+  if (ollamaCfg?.model) {
+    const result = await tryModel(ollamaCfg.model);
+    if (result) return result;
   }
 
-  throw new Error(errors.join("\n"));
+  // 2. Discover installed models and try the rest, best-suited first.
+  //    (Previously a failing/broken configured model just failed the whole
+  //    request even when perfectly good models were installed.)
+  const status = await checkOllama(url);
+  if (!status.ok) {
+    if (errors.length) throw new Error(errors.join("\n"));
+    throw new Error(status.error || "Ollama is not reachable or has no models installed");
+  }
+  const others = (status.models || [])
+    .filter((m) => m.id !== ollamaCfg?.model)
+    .sort((a, b) => rankLocalModel(a.id) - rankLocalModel(b.id) || (a.size || 0) - (b.size || 0))
+    .map((m) => m.id);
+
+  for (const model of others) {
+    const result = await tryModel(model);
+    if (result) return result;
+  }
+
+  if (errors.length) throw new Error(errors.join("\n"));
+  throw new Error("Ollama has no models installed (run: ollama pull llama3.2)");
 }
 

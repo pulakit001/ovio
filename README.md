@@ -84,6 +84,13 @@ npm run electron:build
 
 Electron · React 18 · Vite · whisper.cpp (local STT) · Groq / OpenRouter / Ollama APIs
 
+## 🩹 Recent fixes (v1.2.3)
+
+- **AI notes & chat now actually work with your key** — Groq's model is a "reasoning" model that silently spent the whole reply budget on hidden thinking and returned empty responses; Ovio now sets a low reasoning effort and retries with a larger budget, so notes and chat replies are never empty.
+- **Local AI is far more robust** — if your configured Ollama model is missing, slow, or fails, Ovio automatically discovers your installed models and uses the best-suited one (general instruct models before coder/reasoning ones). `<think>…</think>` blocks from reasoning models are stripped from output.
+- **Local note generation gets a realistic time budget** — up to 8 minutes with a capped output size, instead of timing out at 3.
+- **Adding a cloud key now activates it** — adding a Groq/OpenRouter key while "Fully Local" was selected used to leave the app ignoring the new key; it now switches to cloud mode (Ollama remains the fallback when no key is configured).
+
 ## 🩹 Recent fixes (v1.2.2)
 
 - **API keys no longer disappear** — keys are now encrypted with AES-256-GCM using a

@@ -90,7 +90,9 @@ export async function generateNotes(keys, transcriptLines) {
     groqKeys,
     openrouterKeys,
     [{ role: "user", content: `Here is the full meeting/lecture transcript:\n\n${transcriptText}` }],
-    { system, maxTokens: 8192, temperature: 0.2, aiProvider, ollama }
+    // timeoutMs applies to the local (Ollama) provider: generating full-length
+    // notes on-device can take several minutes on larger models.
+    { system, maxTokens: 8192, temperature: 0.2, aiProvider, ollama, timeoutMs: 480000 }
   );
   return result;
 }
