@@ -12,13 +12,16 @@ function genId() {
 }
 
 // Attach display/status fields (mask + hasKey) so KeyRow can show whether a
-// key actually holds a value instead of always rendering "no key".
+// key actually holds a value instead of always rendering "no key". Respects
+// the locked/masked state computed by the main process (a stored key whose
+// value could not be decrypted shows as "re-enter key", never as "no key").
 function withKeyStatus(k) {
   const key = k.key || "";
   return {
     ...k,
-    hasKey: !!key,
-    masked: key ? `${key.slice(0, 4)}...${key.slice(-4)}` : "",
+    hasKey: !!key || !!k.locked,
+    masked: k.masked || (key ? `${key.slice(0, 4)}...${key.slice(-4)}` : ""),
+    locked: !!k.locked,
   };
 }
 

@@ -60,31 +60,64 @@ export async function checkOllama(url = OLLAMA_DEFAULT_URL, { timeoutMs = 2500 }
 /**
  * Single chat completion against a local Ollama model.
  * Mirrors the shape of groqChat / openrouterChat.
+ *
+ * Robustness: the model is kept warm for 30 minutes between requests
+ * (keep_alive) so repeat calls start instantly, the context window is raised
+ * to 8192 tokens so long transcripts fit, and transient failures (daemon busy
+ * loading the model, connection resets) are retried with a short backoff.
  */
-export async function ollamaChat(url, model, messages, { system, maxTokens = 4096, temperature = 0.3 } = {}) {
+export async function ollamaChat(url, model, messages, { system, maxTokens = 4096, temperature = 0.3, timeoutMs = 180000 } = {}) {
   const body = {
     model: model || OLLAMA_DEFAULT_MODEL,
     messages: [...(system ? [{ role: "system", content: system }] : []), ...messages],
     stream: false,
+    keep_alive: "30m",
     options: {
       temperature,
       num_predict: maxTokens,
+      num_ctx: 8192, // long transcripts need more room than the 2048 default
     },
   };
 
-  const res = await fetch(`${normalizeOllamaUrl(url)}/api/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  let lastErr = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(`${normalizeOllamaUrl(url)}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: ctrl.signal,
+      });
 
-  if (!res.ok) {
-    const err = await res.text().catch(() => "");
-    throw new Error(`Ollama error ${res.status}: ${err}`);
+      if (!res.ok) {
+        const err = await res.text().catch(() => "");
+        // 404 usually means the model isn't installed — not retryable.
+        throw new Error(`Ollama error ${res.status}: ${err}`);
+      }
+
+      const data = await res.json();
+      return data.message?.content || "";
+    } catch (err) {
+      lastErr = err;
+      const aborted = err?.name === "AbortError";
+      const retryable =
+        aborted || /ECONNRESET|ECONNREFUSED|EPIPE|fetch failed|network/i.test(err?.message || "");
+      if (retryable && attempt < 1) {
+        // The daemon is often just loading the model into memory — give it a beat.
+        await new Promise((r) => setTimeout(r, 2500));
+        continue;
+      }
+      if (aborted) {
+        throw new Error("Ollama took too long to respond — try a smaller/faster model in Settings.");
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
   }
-
-  const data = await res.json();
-  return data.message?.content || "";
+  throw lastErr;
 }
 
 /**

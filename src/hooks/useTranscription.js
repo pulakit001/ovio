@@ -21,7 +21,6 @@ export default function useTranscription() {
   const bufferRef = useRef(null);
   const lastTickRef = useRef(0);
   const runningRef = useRef(false);
-  const busyRef = useRef(false);
   const tickerRef = useRef(null);
 
   const userStoppedRef = useRef(false);
@@ -47,6 +46,7 @@ export default function useTranscription() {
 
   const stop = useCallback(() => {
     runningRef.current = false;
+    queueRef.current = [];
     setIsTranscribing(false);
     if (tickerRef.current) clearInterval(tickerRef.current);
     tickerRef.current = null;
@@ -56,29 +56,33 @@ export default function useTranscription() {
 
   const transcribeChunk = useCallback(
     async (chunk) => {
-      if (busyRef.current) return;
       const mode = settings?.mode || "hybrid";
       const useCloud = mode === "cloud" || !window.electronAPI;
       const groqKeys = getActiveGroqKeys();
-      const cloudUsesKeys = useCloud
-        ? groqKeys.slice(0, 1) // STT only needs one key at a time
-        : groqKeys;
 
-      busyRef.current = true;
       try {
         let text = "";
         const localModel = settings?.localSttModel || "turbo";
         if (useCloud) {
-          if (!cloudUsesKeys[0]?.key) throw new Error("No Groq key for cloud transcription");
-          text = await transcribePcmCloud(chunk, cloudUsesKeys, {
+          if (!groqKeys[0]?.key) throw new Error("No Groq key for cloud transcription");
+          // Rotate across every active key; transcribePcmCloud retries 429s.
+          text = await transcribePcmCloud(chunk, groqKeys, {
             model: settings?.sttModel || "whisper-large-v3-turbo",
           });
         } else if (mode === "local") {
           text = await window.electronAPI.transcribePcm(chunk, localModel);
-        } else if (window.electronAPI) {
-          text = await window.electronAPI.transcribePcm(chunk, localModel);
+        } else {
+          // Hybrid: local first; fall back to cloud when local fails OR
+          // returns nothing (previously only the empty case fell back, and a
+          // local crash lost the chunk entirely).
+          try {
+            text = await window.electronAPI.transcribePcm(chunk, localModel);
+          } catch (localErr) {
+            console.warn("[ovio] local transcription failed, trying cloud:", localErr.message);
+            text = "";
+          }
           if (!text && groqKeys[0]?.key) {
-            text = await transcribePcmCloud(chunk, [groqKeys[0]], {
+            text = await transcribePcmCloud(chunk, groqKeys, {
               model: settings?.sttModel || "whisper-large-v3-turbo",
             });
           }
@@ -107,12 +111,43 @@ export default function useTranscription() {
         if (runningRef.current) {
           setError(err.message || "Transcription failed");
         }
-      } finally {
-        busyRef.current = false;
       }
     },
     [settings, getActiveGroqKeys]
   );
+
+  // Serial FIFO pump: chunks are NEVER dropped while a transcription is in
+  // flight (the old code discarded any chunk that arrived while busy — audio
+  // and all). If the backlog grows past the cap (e.g. a long rate-limit
+  // window), the oldest pending chunks are merged into one so no audio is
+  // lost and memory stays bounded.
+  const MAX_QUEUE = 24; // ~2 minutes of audio at 5s chunks
+  const pumpRef = useRef(false);
+  const queueRef = useRef([]);
+
+  const pump = useCallback(async () => {
+    if (pumpRef.current) return;
+    pumpRef.current = true;
+    try {
+      while (runningRef.current && queueRef.current.length > 0) {
+        if (queueRef.current.length > MAX_QUEUE) {
+          const overflow = queueRef.current.splice(0, queueRef.current.length - MAX_QUEUE);
+          const mergedLen = overflow.reduce((n, c) => n + c.length, 0);
+          const merged = new Float32Array(mergedLen);
+          let off = 0;
+          for (const c of overflow) {
+            merged.set(c, off);
+            off += c.length;
+          }
+          queueRef.current.unshift(merged);
+        }
+        const chunk = queueRef.current.shift();
+        await transcribeChunk(chunk);
+      }
+    } finally {
+      pumpRef.current = false;
+    }
+  }, [transcribeChunk]);
 
   const tick = useCallback(() => {
     if (!runningRef.current) return;
@@ -127,9 +162,10 @@ export default function useTranscription() {
       } else {
         bufferRef.current = new Float32Array(0);
       }
-      transcribeChunk(chunk);
+      queueRef.current.push(chunk);
+      pump();
     }
-  }, [transcribeChunk]);
+  }, [pump]);
 
   const start = useCallback(async () => {
     cleanup();
@@ -137,6 +173,8 @@ export default function useTranscription() {
     userStoppedRef.current = false;
     runningRef.current = true;
     bufferRef.current = new Float32Array(0);
+    queueRef.current = [];
+    pumpRef.current = false;
     lastTickRef.current = Date.now();
     windowRef.current = { id: -1 };
 

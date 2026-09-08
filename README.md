@@ -84,6 +84,27 @@ npm run electron:build
 
 Electron · React 18 · Vite · whisper.cpp (local STT) · Groq / OpenRouter / Ollama APIs
 
+## 🩹 Recent fixes (v1.2.2)
+
+- **API keys no longer disappear** — keys are now encrypted with AES-256-GCM using a
+  local master key that survives app updates and re-signing (older versions relied on
+  macOS Keychain-bound encryption that silently broke between releases, making saved
+  keys unreadable). Any key saved by a previous version is migrated automatically.
+- **Settings updates can never wipe keys** — toggling, renaming, or saving settings
+  previously rewrote the key list and destroyed stored values; the merge now preserves
+  every stored key.
+- **No more dropped audio while transcribing** — recording chunks are queued and
+  processed one by one (previously any chunk arriving during a slow cloud request was
+  discarded, leaving gaps in the transcript).
+- **Smarter fallbacks** — hybrid mode falls back to cloud transcription whenever the
+  local engine fails (not just when it returns empty), and cloud transcription rotates
+  across all your active Groq keys with 429-aware retries.
+- **Better local AI** — Ollama requests keep the model warm (instant repeat calls),
+  use a larger 8192-token context window so long transcripts fit, and retry transient
+  daemon errors with clear timeout messaging.
+- **Duplicate-key protection** — re-running onboarding or adding a key you already
+  saved no longer creates duplicate entries.
+
 ---
 
 Made with ❤️ by the team at **Snippetz Labs**
