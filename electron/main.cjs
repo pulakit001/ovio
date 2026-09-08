@@ -26,7 +26,9 @@ function createSplash() {
     hasShadow: false,
     icon: LOGO_PATH,
   });
-  splashWindow.loadFile(path.join(__dirname, "splash.html"));
+  splashWindow.loadFile(path.join(__dirname, "splash.html"), {
+    query: { v: app.getVersion() },
+  });
 
   // Keep splash on top of main window
   splashWindow.setAlwaysOnTop(true, "screen-saver");
