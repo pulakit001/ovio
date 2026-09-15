@@ -1,0 +1,14 @@
+node_modules
+dist
+release
+.env
+.DS_Store
+models
+*.log
+# root-level macOS screen captures only (the / anchors to repo root —
+# assets/screenshot-*.png must never match)
+/Screenshot*
+.freebuff/
+
+# private landing page workspace — local only, never published
+landing/

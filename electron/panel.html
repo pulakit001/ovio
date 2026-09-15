@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta
+  http-equiv="Content-Security-Policy"
+  content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'"
+/>
+<title>Ovio Ambient</title>
+<style>
+  /* ────────────────────────────────────────────────────────────────
+     Ovio ambient bar — ONE small horizontal pill. Static geometry (the
+     window hugs the card): no expand/collapse, no width transitions,
+     no blur filters → nothing can overlap itself or glitch.
+     ──────────────────────────────────────────────────────────────── */
+  * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+  html, body {
+    background: transparent; overflow: hidden; height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .bar {
+    width: 100%; height: 100%;
+    display: flex; align-items: center; gap: 7px;
+    padding: 0 8px 0 10px;
+    background: rgba(13, 14, 17, 0.92);
+    backdrop-filter: blur(28px);
+    -webkit-backdrop-filter: blur(28px);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 14px;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+    color: #F5F6F8;
+    animation: barIn 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .bar.out { animation: barOut 160ms ease both; }
+  @keyframes barIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  @keyframes barOut { from { opacity: 1; } to { opacity: 0; transform: translateY(6px); } }
+
+  /* Left segment (wave + clock) — clicking it opens the recording in-app */
+  .open-zone {
+    display: flex; align-items: center; gap: 8px;
+    border: none; background: transparent;
+    padding: 4px 6px; margin-left: -6px; border-radius: 8px;
+    cursor: pointer; flex-shrink: 0; font-family: inherit;
+    transition: background 140ms ease;
+  }
+  .open-zone:hover { background: rgba(255, 255, 255, 0.07); }
+
+  /* Live waveform — JS-driven heights (GPU-cheap, no keyframes) */
+  .wave { display: flex; align-items: center; gap: 2px; height: 16px; }
+  .wave span {
+    width: 2.5px; height: 3px; border-radius: 2px;
+    background: #4D8DFF;
+    transition: height 100ms ease, background 240ms ease;
+  }
+  .bar.rec .wave span { background: #4D8DFF; }
+  .bar.paused .wave span { background: rgba(255, 159, 10, 0.75); height: 3px !important; }
+
+  .clock {
+    font-size: 11px; font-weight: 600; color: rgba(255, 255, 255, 0.92);
+    font-variant-numeric: tabular-nums; letter-spacing: 0.2px;
+    min-width: 34px; text-align: center;
+  }
+
+  /* Editable title — click to rename (Enter/blur commits) */
+  .title {
+    flex: 1; min-width: 0;
+    border: 1px solid transparent; border-radius: 6px;
+    background: transparent; outline: none;
+    font-size: 11.5px; font-weight: 600; letter-spacing: -0.1px;
+    color: #F5F6F8; font-family: inherit;
+    padding: 3px 6px; text-overflow: ellipsis;
+    cursor: text; user-select: text; -webkit-user-select: text;
+    transition: border-color 160ms ease, background 160ms ease;
+  }
+  .title::selection { background: rgba(47, 107, 255, 0.4); }
+  .title:hover { border-color: rgba(255, 255, 255, 0.10); background: rgba(255, 255, 255, 0.04); }
+  .title:focus { border-color: rgba(77, 141, 255, 0.55); background: rgba(255, 255, 255, 0.06); }
+
+  /* Small icon buttons */
+  .ibtn {
+    width: 26px; height: 26px; flex-shrink: 0;
+    border: none; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(255, 255, 255, 0.08); cursor: pointer;
+    transition: background 150ms ease, transform 120ms ease;
+  }
+  .ibtn:hover { background: rgba(255, 255, 255, 0.18); }
+  .ibtn:active { transform: scale(0.9); }
+  .ibtn.done { background: #FFFFFF; }
+  .ibtn.done:hover { box-shadow: 0 0 12px rgba(255, 255, 255, 0.25); }
+</style>
+</head>
+<body>
+  <div class="bar" id="bar">
+    <button class="open-zone" id="openZone" title="Open this recording in Ovio">
+      <span class="wave" id="wave"><span></span><span></span><span></span><span></span><span></span></span>
+      <span class="clock" id="elapsed">0:00</span>
+    </button>
+    <input class="title" id="title" spellcheck="false" placeholder="Recording" />
+    <button class="ibtn" id="btnToggle" title="Pause / Resume">
+      <svg width="11" height="11" viewBox="0 0 12 12" id="toggleIcon"></svg>
+    </button>
+    <button class="ibtn done" id="btnDone" title="Done — save &amp; transcribe">
+      <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6.4L4.8 9.2L10 3" stroke="#0A0A0D" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <button class="ibtn" id="btnCancel" title="Discard">
+      <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2.5 2.5L9.5 9.5M9.5 2.5L2.5 9.5" stroke="rgba(255,255,255,0.9)" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const bar = $("bar");
+    const titleEl = $("title");
+    const elapsedEl = $("elapsed");
+    const btnToggle = $("btnToggle");
+    const toggleIcon = $("toggleIcon");
+    const btnDone = $("btnDone");
+    const btnCancel = $("btnCancel");
+    const openZone = $("openZone");
+    const waveEl = $("wave");
+    const barEls = waveEl.querySelectorAll("span");
+    const api = window.electronAPI;
+    const send = (cmd) => { try { api.ambientPanel.send(cmd); } catch {} };
+
+    const PAUSE_SVG = '<rect x="3.4" y="1.8" width="2.4" height="8.4" rx="1" fill="#fff"/><rect x="6.9" y="1.8" width="2.4" height="8.4" rx="1" fill="#fff"/>';
+    const PLAY_SVG = '<path d="M3.4 2.1L10 6L3.4 9.9Z" fill="#fff"/>';
+
+    let state = { panelState: "recording", label: "", elapsed: 0 };
+    let dirtyName = false;   // user typed a custom name — stop following the live label
+    let renameTimer = null;
+    let closing = false;
+
+    function fmt(sec) {
+      sec = Math.max(0, Math.floor(sec || 0));
+      const m = Math.floor(sec / 60);
+      const s = sec % 60;
+      return `${m}:${String(s).padStart(2, "0")}`;
+    }
+
+    function render() {
+      const st = state.panelState;
+      bar.classList.toggle("rec", st === "recording");
+      bar.classList.toggle("paused", st === "paused");
+      toggleIcon.innerHTML = st === "paused" ? PLAY_SVG : PAUSE_SVG;
+      btnToggle.title = st === "paused" ? "Resume" : "Pause";
+      elapsedEl.textContent = fmt(state.elapsed);
+      if (!dirtyName) titleEl.value = state.label || "";
+    }
+
+    // Waveform: organic bar heights while recording; flat when paused.
+    let t = 0;
+    setInterval(() => {
+      t += 1;
+      const recording = state.panelState === "recording";
+      barEls.forEach((b, i) => {
+        if (recording) {
+          const h = 3 + Math.abs(Math.sin(i * 0.8 + t * 0.9)) * 8 + Math.random() * 4;
+          b.style.height = `${Math.round(h)}px`;
+        } else {
+          b.style.height = "3px";
+        }
+      });
+    }, 120);
+
+    // Buttons
+    btnToggle.addEventListener("click", () => {
+      send(state.panelState === "recording" ? "pause" : state.panelState === "paused" ? "resume" : "record");
+    });
+    btnDone.addEventListener("click", () => {
+      if (closing) return;
+      closing = true;
+      bar.classList.add("out");
+      send("done");
+      setTimeout(() => send("close"), 160);
+    });
+    btnCancel.addEventListener("click", () => {
+      if (closing) return;
+      closing = true;
+      bar.classList.add("out");
+      send("cancel");
+      setTimeout(() => send("close"), 150);
+    });
+
+    // Click the wave/clock zone → jump to this recording in the Ovio window.
+    openZone.addEventListener("click", () => send("open"));
+
+    // Title editing → rename (debounced). The main process pins the window
+    // interactive while this field is focused, so typing is never swallowed.
+    titleEl.addEventListener("focus", () => send({ cmd: "editing", value: true }));
+    titleEl.addEventListener("blur", () => {
+      send({ cmd: "editing", value: false });
+      commitRename();
+    });
+    titleEl.addEventListener("input", () => {
+      dirtyName = true;
+      clearTimeout(renameTimer);
+      renameTimer = setTimeout(commitRename, 400);
+    });
+    titleEl.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") titleEl.blur();
+      if (e.key === "Escape") { titleEl.value = state.label || ""; titleEl.blur(); }
+    });
+    function commitRename() {
+      clearTimeout(renameTimer);
+      const name = titleEl.value.trim();
+      if (name && name !== state.label) send({ cmd: "rename", name });
+    }
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && document.activeElement !== titleEl) send("close");
+    });
+
+    // Live state from the main renderer (panelState / label / elapsed).
+    if (api.ambientPanel.onState) {
+      api.ambientPanel.onState((st) => {
+        state = st || state;
+        render();
+      });
+    }
+    render();
+  </script>
+</body>
+</html>
