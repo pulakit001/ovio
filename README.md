@@ -5,9 +5,9 @@
 <h1 align="center">Ovio</h1>
 
 <p align="center">
-  <strong>Press a shortcut anywhere. Say it once. Get the notes.</strong><br/>
-  A local-first recorder for macOS — on-device transcription, AI-written notes,<br/>
-  and a fully-local mode where nothing ever leaves your machine.
+  <strong>Local transcription. AI notes. Open source.</strong><br/>
+  High-quality speech-to-text and AI-written notes that run on your Mac —<br/>
+  with a system-wide shortcut to start a recording from anywhere.
 </p>
 
 <p align="center">
@@ -21,38 +21,34 @@
 
 ![Ovio dashboard](assets/screenshot-dashboard.png)
 
-Ovio lives in your Dock and stays out of your way. The moment you need it, a
-system-wide shortcut starts recording from any app — Slack, a browser, a Zoom
-call. When you stop, the transcript is saved, the notes are written, and
-everything is filed exactly where it belongs.
+Ovio lives in your Dock and stays out of your way. Talk to it — in a meeting,
+a lecture, or on a call — and it transcribes live on your machine, writes the
+structured notes for you, and files everything exactly where it belongs.
+Want to start without touching the app? A system-wide shortcut does that too.
 
-## How you use it
+## What it does
 
-**One shortcut, from anywhere.** No window to find, no app to switch to.
+**You talk. Ovio does the rest.**
 
-| Chord | Action |
-|---|---|
-| `⌘ ⇧ Space` | start / stop from any app, any screen |
-| `⌥ ⇧ Space` | alternate chord (when another app owns the first) |
-| `⌘ ⇧ U` | safety chord, always registered |
-| `⌘ K` | search every recording by a word you remember saying |
-| `⌘ ,` | settings |
+1. **Transcribes as you talk** — high-quality STT runs on your Mac
+   (Parakeet-TDT v3, 25 languages). Words stream in live; nothing leaves the
+   machine.
+2. **Writes the notes** — stop, and the AI drafts a structured note: a short
+   overview, the key points, a detailed section per theme. Then the chat
+   answers from the transcript itself — ask *"what did we decide?"* and get
+   a grounded answer, not a guess.
+3. **Files itself** — right project, or the permanent General Folder on the
+   go. `⌘K` finds the moment you're thinking of, across every transcript.
+4. **Starts from anywhere, if you want it to** — `⌘⇧Space` begins a recording
+   from any app, any screen (alternate: `⌥⇧Space` · safety chord: `⌘⇧U`).
+   Every chord is rebindable in Settings, and the whole thing switches off
+   with one toggle. It's a convenience, not a requirement — Ovio works
+   just as well straight from the Dock.
 
-Every chord is rebindable in **Settings → Record from anywhere**, and the whole
-system switches off with one toggle. Recordings made on the go land safely in
-the permanent **General Folder** — nothing casual is ever lost.
+## How the notes are written
 
-**Record → transcribe → done.** While you talk, the transcript streams in live.
-When you stop, Ovio writes the notes.
-
-![Live recording with AI notes and grounded chat](assets/screenshot-ai-notes.png)
-
-## What Ovio writes
-
-Not a wall of text — a structured note: a short overview, the key points, a
-detailed section per theme, and a summary at the end. Then the chat answers
-from the transcript itself: ask *"what did we decide?"* and get a short,
-grounded answer, not a guess.
+Not a wall of text — a structured note with a summary at the end. The engine
+behind it:
 
 - **Context-aware pipeline** — the engine reads the model's real context window
   first. Most recordings are a single call; hour-long lectures chain small
@@ -60,6 +56,8 @@ grounded answer, not a guess.
 - **Gemini-powered, with fallbacks** — Gemini Flash-Lite by default, automatic
   multi-key and multi-model fallback, OpenRouter as a second provider.
 - **Chat that cites your audio, not its imagination.**
+
+![Live recording with AI notes and grounded chat](assets/screenshot-ai-notes.png)
 
 ## The local mode — the thing Ovio is built around
 
@@ -93,14 +91,16 @@ full-screen. Recordings and their source material, in one place.
 
 ![The Vault](assets/screenshot-vault.png)
 
-## Free forever
+## Open source
 
-MIT-licensed. No account, no subscription, no telemetry. Fully-local mode
-costs $0 forever; cloud keys are yours alone.
+**Every line of Ovio is [MIT-licensed](LICENSE) and on GitHub.** No account,
+no subscription, no telemetry. Read the code, audit the network calls, fork
+it, ship your own build — that's the point.
 
 ## Install
 
-Grab the DMG from the
+**[Download Ovio-mac.dmg](https://github.com/pulakit001/ovio/releases/latest/download/Ovio-mac.dmg)**
+(≈100 MB, Apple Silicon) — or browse all files on the
 **[Releases page](https://github.com/pulakit001/ovio/releases)**.
 
 1. Open the DMG, drag **Ovio** into **Applications**, eject the DMG.
