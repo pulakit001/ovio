@@ -7,6 +7,7 @@ const {
 } = require("./whisper.cjs");
 const { registerSettingsIpc, loadSettings, persistSettings, AMBIENT_DEFAULT_CHORDS } = require("./settings.cjs");
 const parakeet = require("./parakeet.cjs");
+const { startUpdater, stopUpdater } = require("./updater.cjs");
 
 let mainWindow;
 let panelWindow;
@@ -297,6 +298,10 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  startUpdater({
+    onUpdateAvailable: (info) => broadcastToMain("updater:update", info),
+    onRemoteMessage: (msg) => broadcastToMain("updater:message", msg),
+  });
   registerSettingsIpc();
 
   if (process.platform === "darwin" && app.dock) {
@@ -668,6 +673,11 @@ app.whenReady().then(() => {
     electron: process.versions.electron,
     platform: process.platform,
   }));
+  ipcMain.handle("update:openPage", (_e, url) => {
+    if (typeof url === "string" && /^https:\/\/(github\.com|githubusercontent\.com)\//.test(url)) {
+      shell.openExternal(url);
+    }
+  });
   ipcMain.handle("ambient:configure", (_event, config) => {
     const s = loadSettings();
     const previous = Array.isArray(s.ambient?.chords) ? s.ambient.chords : [];
@@ -769,6 +779,7 @@ app.whenReady().then(() => {
 });
 
 app.on("before-quit", () => {
+  stopUpdater();
   destroyWhisper();
   parakeet.stopServer();
   destroyPanel();

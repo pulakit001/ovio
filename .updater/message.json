@@ -1,0 +1,8 @@
+{
+  "enabled": false,
+  "id": "example-2026-09-16",
+  "title": "Hello from Snippetz Labs",
+  "body": "This is how you talk to every installed Ovio at once. Edit this file, flip enabled to true, commit — and every app pops this message within its next check.",
+  "ctaLabel": "",
+  "ctaUrl": ""
+}

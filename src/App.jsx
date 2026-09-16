@@ -4,6 +4,7 @@ import Dashboard from "./screens/Dashboard";
 import Onboarding from "./screens/Onboarding";
 import Settings from "./screens/Settings";
 import CommandPalette from "./components/CommandPalette";
+import UpdatePrompt from "./components/UpdatePrompt";
 import { LayoutDashboard, Mic, Settings as SettingsIcon, Download, Check, Search } from "lucide-react";
 import usePersistence from "./hooks/usePersistence";
 import { SettingsProvider, useSettings } from "./context/SettingsContext";
@@ -450,6 +451,7 @@ button:focus-visible { outline: 2px solid rgba(47,107,255,0.45); outline-offset:
       )}
 
       {/* Universal search palette (⌘K) */}
+      <UpdatePrompt />
       <CommandPalette
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}

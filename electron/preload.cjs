@@ -70,6 +70,21 @@ contextBridge.exposeInMainWorld("electronAPI", {
     read: (relPath) => ipcRenderer.invoke("vault:read", relPath),
     remove: (relPath) => ipcRenderer.invoke("vault:remove", relPath),
   },
+  // Updater: the app checks GitHub releases + a remote message feed on its
+  // own; the renderer just listens and shows the popup when told.
+  updater: {
+    onUpdateAvailable: (cb) => {
+      const listener = (_e, info) => cb(info);
+      ipcRenderer.on("updater:update", listener);
+      return () => ipcRenderer.removeListener("updater:update", listener);
+    },
+    onRemoteMessage: (cb) => {
+      const listener = (_e, msg) => cb(msg);
+      ipcRenderer.on("updater:message", listener);
+      return () => ipcRenderer.removeListener("updater:message", listener);
+    },
+    openPage: (url) => ipcRenderer.send("update:openPage", url),
+  },
   // Control surface exposed to the floating panel window itself.
   ambientPanel: {
     send: (cmd) => ipcRenderer.send("ambient:panel", cmd),
