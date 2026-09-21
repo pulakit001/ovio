@@ -6,7 +6,7 @@ import Settings from "./screens/Settings";
 import CommandPalette from "./components/CommandPalette";
 import UpdatePrompt from "./components/UpdatePrompt";
 import { LayoutDashboard, Mic, Settings as SettingsIcon, Download, Check, Search } from "lucide-react";
-import usePersistence from "./hooks/usePersistence";
+import usePersistence, { ensureLoaded, writeStore } from "./hooks/usePersistence";
 import { SettingsProvider, useSettings } from "./context/SettingsContext";
 import { FONT, COLORS, GRADIENTS, applyTheme } from "./ui/theme";
 import * as T from "./ui/theme";
@@ -50,13 +50,22 @@ function AppShell() {
   // Universal search (⌘K): one palette over recordings, notes, files, projects.
   const [paletteOpen, setPaletteOpen] = useState(false);
   // Vault metadata (per-subfolder file attachments) lives here so both the
-  // recorder and the ⌘K palette can see it. Binaries stay in userData/files.
-  const [vaultBySub, setVaultBySub] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("ovio_vault") || "{}"); } catch { return {}; }
-  });
+  // recorder and the ⌘K palette can see it. Binaries stay in userData/files,
+  // metadata lives in the durable disk store (was: localStorage).
+  const [vaultBySub, setVaultBySubState] = useState(null);
   useEffect(() => {
-    try { localStorage.setItem("ovio_vault", JSON.stringify(vaultBySub)); } catch {}
-  }, [vaultBySub]);
+    let alive = true;
+    ensureLoaded("vault").then((v) => { if (alive) setVaultBySubState(v || {}); });
+    return () => { alive = false; };
+  }, []);
+  const setVaultBySub = useCallback((updater) => {
+    setVaultBySubState((prev) => {
+      const base = prev || {};
+      const next = typeof updater === "function" ? updater(base) : updater;
+      writeStore("vault", next);
+      return next;
+    });
+  }, []);
 
   // Ambient recording: commands arrive from the floating popup (gestured by
   // the global shortcut in the main process) and are forwarded to the recorder.
@@ -186,7 +195,7 @@ function AppShell() {
     applyTheme(settings?.theme || "dark");
   }, [settings?.theme]);
 
-  if (loading) {
+  if (loading || vaultBySub === null) {
     return (
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.windowBg, fontFamily: FONT }}>
         <div style={{ fontSize: 13, color: COLORS.textTertiary }}>Loading…</div>

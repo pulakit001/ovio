@@ -8,6 +8,7 @@ const {
 const { registerSettingsIpc, loadSettings, persistSettings, AMBIENT_DEFAULT_CHORDS } = require("./settings.cjs");
 const parakeet = require("./parakeet.cjs");
 const { startUpdater, stopUpdater } = require("./updater.cjs");
+const { registerStoreIpc } = require("./storage.cjs");
 
 let mainWindow;
 let panelWindow;
@@ -303,6 +304,7 @@ app.whenReady().then(() => {
     onRemoteMessage: (msg) => broadcastToMain("updater:message", msg),
   });
   registerSettingsIpc();
+  registerStoreIpc(); // durable disk-backed library (replaces localStorage)
 
   if (process.platform === "darwin" && app.dock) {
     try {

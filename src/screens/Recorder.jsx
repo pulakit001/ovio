@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
 import {
   Mic,
   Download,
@@ -27,6 +28,9 @@ import {
   MoveRight,
   Paperclip,
   File as FileIco,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
 } from "lucide-react";
 import useTranscription from "../hooks/useTranscription";
 import useAutoNotes from "../hooks/useAutoNotes";
@@ -765,67 +769,191 @@ function VaultSection({ files, busy, onAdd, onView, onRemove, open, onToggle }) 
   );
 }
 
-// Fullscreen file viewer. Images fit the screen on a dark stage; PDFs load
-// inline; Esc or the backdrop closes. Remove lives here too, top-right.
+// Fullscreen file viewer — PORTALED to <body>. The old version used
+// position:fixed inside the app shell, whose entrance-animation transforms
+// trap fixed positioning: the chrome rendered misaligned, the ✕ didn't sit
+// under the pointer, and Escape was the only reliable exit. At <body> level
+// the overlay covers the entire window (main nav included) and every button
+// lands exactly where it looks.
+//
+// Images: real zoom — wheel, +/- buttons, double-click toggle, drag to pan,
+// 0/“Fit” to reset. PDFs/text: inline frames. One uniform dark chrome for
+// every type; closes via ✕, Escape, or clicking the empty stage.
 function VaultLightbox({ payload, onClose, onRemove }) {
   const { file, url, mime } = payload;
+  const [zoom, setZoom] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const dragRef = useRef(null); // { startX, startY, baseX, baseY }
+  const stageRef = useRef(null); // native wheel listener (React's is passive)
+  const zoomRef = useRef(1);
+  const isImage = ["image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp", "image/svg+xml"].includes(mime);
+  const isPdf = mime === "application/pdf";
+
+  const applyZoom = (z) => {
+    const next = Math.min(8, Math.max(0.25, z));
+    zoomRef.current = next;
+    setZoom(next);
+    if (next === 1) setOffset({ x: 0, y: 0 });
+  };
+
+  // Fresh view per file; wheel-zoom via a native non-passive listener —
+  // React's synthetic onWheel is passive, so preventDefault would be ignored
+  // and the stage would scroll instead of zooming.
+  useEffect(() => { setZoom(1); setOffset({ x: 0, y: 0 }); zoomRef.current = 1; }, [file?.id]);
   useEffect(() => {
-    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    const el = stageRef.current;
+    if (!el) return undefined;
+    const handler = (e) => {
+      if (!isImage) return;
+      e.preventDefault();
+      applyZoom(zoomRef.current * Math.pow(1.0015, -e.deltaY));
+    };
+    el.addEventListener("wheel", handler, { passive: false });
+    return () => el.removeEventListener("wheel", handler);
+  }, [isImage, url]);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); onClose(); }
+      else if (isImage && (e.key === "+" || e.key === "=")) applyZoom(zoom * 1.25);
+      else if (isImage && e.key === "-") applyZoom(zoom / 1.25);
+      else if (isImage && e.key === "0") { setZoom(1); setOffset({ x: 0, y: 0 }); }
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-  const isPdf = mime === "application/pdf";
-  return (
+  }, [onClose, zoom, isImage]);
+
+  const onPointerDown = (e) => {
+    if (!isImage || zoom === 1) return;
+    dragRef.current = { startX: e.clientX, startY: e.clientY, baseX: offset.x, baseY: offset.y };
+    setDragging(true);
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+  const onPointerMove = (e) => {
+    const d = dragRef.current;
+    if (!d) return;
+    setOffset({ x: d.baseX + (e.clientX - d.startX), y: d.baseY + (e.clientY - d.startY) });
+  };
+  const onPointerUp = () => { dragRef.current = null; setDragging(false); };
+
+  const chipBtn = {
+    width: 30, height: 30, borderRadius: 8, border: `1px solid ${COLORS.borderStrong}`,
+    background: "transparent", color: COLORS.text, cursor: "pointer",
+    display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "inherit",
+    transition: "background 140ms ease, border-color 140ms ease",
+  };
+
+  return createPortal(
     <div
-      onClick={onClose}
       style={{
-        position: "fixed", inset: 0, zIndex: 950, background: "rgba(5,5,7,0.94)",
+        position: "fixed", inset: 0, zIndex: 3000, background: "rgba(5,5,7,0.96)",
         display: "flex", flexDirection: "column",
         animation: "ovioOverlayIn 180ms ease both",
       }}
     >
+      {/* Uniform chrome — same language as the app's own titlebars */}
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
           height: 52, minHeight: 52, display: "flex", alignItems: "center",
-          justifyContent: "space-between", padding: "0 16px", flexShrink: 0,
+          justifyContent: "space-between", padding: "0 14px 0 16px", flexShrink: 0,
+          borderBottom: `1px solid ${COLORS.border}`, background: COLORS.surface,
         }}
       >
-        <span style={{ fontSize: 12.5, color: "rgba(255,255,255,0.85)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <span style={{ fontSize: 12.5, color: COLORS.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
           {file.name}
-          <span style={{ color: "rgba(255,255,255,0.4)", marginLeft: 8 }}>{formatBytes(file.size)}</span>
+          <span style={{ color: COLORS.textTertiary, marginLeft: 8 }}>{formatBytes(file.size)}</span>
         </span>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+          {isImage && (
+            <div style={{ display: "flex", alignItems: "center", gap: 4, marginRight: 6 }}>
+              <button onClick={() => applyZoom(zoom / 1.25)} title="Zoom out (−)" style={chipBtn}
+                onMouseEnter={(e) => { e.currentTarget.style.background = COLORS.hoverBg; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                <ZoomOut size={14} />
+              </button>
+              <span style={{
+                minWidth: 46, textAlign: "center", fontSize: 11.5, color: COLORS.textSecondary,
+                border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "6px 0",
+                fontVariantNumeric: "tabular-nums", userSelect: "none",
+              }}>{Math.round(zoom * 100)}%</span>
+              <button onClick={() => applyZoom(zoom * 1.25)} title="Zoom in (+)" style={chipBtn}
+                onMouseEnter={(e) => { e.currentTarget.style.background = COLORS.hoverBg; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                <ZoomIn size={14} />
+              </button>
+              <button onClick={() => { setZoom(1); setOffset({ x: 0, y: 0 }); }} title="Fit to screen (0)" style={chipBtn}
+                onMouseEnter={(e) => { e.currentTarget.style.background = COLORS.hoverBg; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
+                <Maximize2 size={13} />
+              </button>
+            </div>
+          )}
           <button onClick={() => onRemove(file)} title="Remove file"
             style={{
-              display: "flex", alignItems: "center", gap: 5, border: "1px solid rgba(255,255,255,0.18)",
-              background: "transparent", color: "rgba(255,255,255,0.75)", fontSize: 11.5,
-              borderRadius: 7, padding: "5px 10px", cursor: "pointer", fontFamily: "inherit",
-            }}>
+              display: "flex", alignItems: "center", gap: 5, border: `1px solid ${COLORS.borderStrong}`,
+              background: "transparent", color: COLORS.textSecondary, fontSize: 11.5,
+              borderRadius: 8, padding: "6px 11px", cursor: "pointer", fontFamily: "inherit",
+              transition: "color 140ms ease, border-color 140ms ease",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = COLORS.red; e.currentTarget.style.borderColor = COLORS.red; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = COLORS.textSecondary; e.currentTarget.style.borderColor = COLORS.borderStrong; }}>
             <Trash2 size={12} /> Remove
           </button>
           <button onClick={onClose} title="Close (Esc)"
             style={{
-              width: 28, height: 28, borderRadius: 7, border: "1px solid rgba(255,255,255,0.18)",
-              background: "transparent", color: "rgba(255,255,255,0.85)", cursor: "pointer",
+              width: 30, height: 30, borderRadius: 8, border: `1px solid ${COLORS.borderStrong}`,
+              background: "transparent", color: COLORS.text, cursor: "pointer",
               display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
+              transition: "background 140ms ease, color 140ms ease, border-color 140ms ease",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,93,93,0.15)"; e.currentTarget.style.color = COLORS.red; e.currentTarget.style.borderColor = COLORS.red; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = COLORS.text; e.currentTarget.style.borderColor = COLORS.borderStrong; }}>
             <X size={14} />
           </button>
         </div>
       </div>
-      <div onClick={(e) => e.stopPropagation()} style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 24px 24px" }}>
+
+      {/* Stage — clicking empty space closes; content never does */}
+      <div
+        ref={stageRef}
+        onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+        style={{
+          flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center",
+          padding: "20px 24px 24px", overflow: "hidden", position: "relative",
+          cursor: isImage && zoom > 1 ? (dragging ? "grabbing" : "grab") : "default",
+        }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerLeave={onPointerUp}
+      >
         {url && isPdf ? (
           <iframe src={url} title={file.name} style={{ width: "100%", height: "100%", border: "none", borderRadius: 8, background: "#fff" }} />
-        ) : url && mime === "text/plain" ? (
-          <iframe src={url} title={file.name} style={{ width: "100%", height: "100%", border: "none", borderRadius: 8, background: "var(--ovio-surface)" }} />
+        ) : url && (mime === "text/plain" || mime === "text/csv") ? (
+          <iframe src={url} title={file.name} style={{ width: "100%", height: "100%", border: "none", borderRadius: 8, background: COLORS.surface }} />
         ) : url ? (
-          <img src={url} alt={file.name} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 4 }} />
+          <img
+            src={url}
+            alt={file.name}
+            draggable={false}
+            onDoubleClick={() => applyZoom(zoom === 1 ? 2 : 1)}
+            style={{
+              maxWidth: zoom === 1 ? "100%" : "none",
+              maxHeight: zoom === 1 ? "100%" : "none",
+              width: zoom === 1 ? "auto" : `${zoom * 100}%`,
+              transform: `translate(${offset.x}px, ${offset.y}px)`,
+              transformOrigin: "center center",
+              objectFit: "contain", borderRadius: 4, userSelect: "none",
+            }}
+          />
         ) : (
-          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>Loading…</span>
+          <span style={{ fontSize: 12, color: COLORS.textTertiary }}>Loading…</span>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

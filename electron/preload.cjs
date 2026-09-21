@@ -2,6 +2,14 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("electronAPI", {
   platform: process.platform,
+  // Durable library storage — atomic JSON files in userData/library/.
+  // The renderer's localStorage is a cache; the disk store is the truth.
+  store: {
+    read: (key) => ipcRenderer.invoke("store:read", key),
+    write: (key, value) => ipcRenderer.invoke("store:write", key, value),
+    importOnce: (key, value) => ipcRenderer.invoke("store:import", key, value),
+    remove: (key) => ipcRenderer.invoke("store:remove", key),
+  },
   // Version/build info for Settings → About.
   appInfo: () => ipcRenderer.invoke("app:info"),
   transcribePcm: (chunk, model) => ipcRenderer.invoke("whisper:transcribe", chunk, model),
