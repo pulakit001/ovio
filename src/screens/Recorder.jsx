@@ -2522,8 +2522,15 @@ export default function MacNoteTaker({
                         <div style={{
                           maxWidth: "85%", padding: "8px 12px", borderRadius: 12,
                           fontSize: 12.5, lineHeight: 1.5,
-                          background: m.role === "user" ? COLORS.text : COLORS.surface2,
-                          color: m.role === "user" ? COLORS.text : COLORS.text,
+                          // User bubbles: accent blue with white text (readable in
+                          // both themes). Bot bubbles: surface with normal text.
+                          // Was background+color both COLORS.text — white-on-white
+                          // in dark mode, black-on-black in light.
+                          background: m.role === "user" ? COLORS.blue : COLORS.surface2,
+                          border: m.role === "user" ? "none" : `1px solid ${COLORS.border}`,
+                          color: m.role === "user" ? "#FFFFFF" : COLORS.text,
+                          borderBottomRightRadius: m.role === "user" ? 4 : 12,
+                          borderBottomLeftRadius: m.role === "user" ? 12 : 4,
                           whiteSpace: "pre-wrap",
                           animation: m.role === "user" ? "ovioChatInUser 260ms cubic-bezier(.22,1,.36,1) both" : "ovioChatInBot 300ms cubic-bezier(.22,1,.36,1) both",
                         }}>{m.content}</div>
@@ -2578,7 +2585,7 @@ export default function MacNoteTaker({
         <div style={{
           position: "fixed", bottom: 28, left: "50%", transform: "translateX(-50%)",
           zIndex: 400, display: "flex", alignItems: "center", gap: 8,
-          background: COLORS.text, color: COLORS.text, fontSize: 12.5, fontWeight: 500,
+          background: COLORS.text, color: COLORS.windowBg, fontSize: 12.5, fontWeight: 500,
           borderRadius: 999, padding: "9px 16px", boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
           pointerEvents: "none", animation: "ovioToastIn 260ms cubic-bezier(.22,1,.36,1) both, ovioFadeOut 200ms ease 2200ms both",
         }}>
