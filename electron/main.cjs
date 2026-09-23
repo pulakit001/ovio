@@ -298,6 +298,21 @@ function createWindow() {
   }
 }
 
+// One Ovio at a time — a second launch focuses the existing window instead
+// of running alongside (which used to fork your library into two stores).
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    const win = mainWindow || (BrowserWindow.getAllWindows()[0] ?? null);
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+    }
+  });
+}
+
 app.whenReady().then(() => {
   startUpdater({
     onUpdateAvailable: (info) => broadcastToMain("updater:update", info),

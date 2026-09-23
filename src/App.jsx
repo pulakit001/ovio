@@ -504,7 +504,7 @@ function EntranceVeil() {
     return () => { clearTimeout(a); clearTimeout(b); };
   }, []);
   if (phase === "gone") return null;
-  const isLight = T.windowBg && String(T.windowBg).startsWith("#F");
+  const isLight = COLORS.windowBg && String(COLORS.windowBg).startsWith("#F");
   return (
     <div
       aria-hidden

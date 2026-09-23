@@ -12,3 +12,4 @@ models
 
 # private landing page workspace — local only, never published
 landing/
+.data-recovery/
