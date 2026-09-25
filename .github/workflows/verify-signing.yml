@@ -29,7 +29,15 @@ jobs:
         run: npm run build
 
       - name: Build + sign + notarize mac app
-        run: npx electron-builder --mac --publish never
+        # Missing secrets arrive as empty strings, which break electron-builder
+        # (empty CSC_LINK is read as a file path) — unset the empties first.
+        run: |
+          [ -z "$CSC_LINK" ] && unset CSC_LINK || true
+          [ -z "$CSC_KEY_PASSWORD" ] && unset CSC_KEY_PASSWORD || true
+          [ -z "$APPLE_ID" ] && unset APPLE_ID || true
+          [ -z "$APPLE_APP_SPECIFIC_PASSWORD" ] && unset APPLE_APP_SPECIFIC_PASSWORD || true
+          [ -z "$APPLE_TEAM_ID" ] && unset APPLE_TEAM_ID || true
+          npx electron-builder --mac --publish never
         env:
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}

@@ -39,7 +39,15 @@ jobs:
         run: npm ci
 
       - name: Build, sign (and notarize if secrets exist)
-        run: npx electron-builder --mac --publish never
+        # GitHub sets missing secrets as EMPTY strings; electron-builder treats
+        # an empty CSC_LINK as a file path and fails. Unset the empties first.
+        run: |
+          [ -z "$CSC_LINK" ] && unset CSC_LINK || true
+          [ -z "$CSC_KEY_PASSWORD" ] && unset CSC_KEY_PASSWORD || true
+          [ -z "$APPLE_ID" ] && unset APPLE_ID || true
+          [ -z "$APPLE_APP_SPECIFIC_PASSWORD" ] && unset APPLE_APP_SPECIFIC_PASSWORD || true
+          [ -z "$APPLE_TEAM_ID" ] && unset APPLE_TEAM_ID || true
+          npx electron-builder --mac --publish never
         env:
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
@@ -48,9 +56,15 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Verify signing (hard gate when a cert is configured)
-        run: node scripts/verify-release-signing.cjs
+        # The gate needs to know whether a cert was SUPPOSED to be used. A
+        # secret's presence can't be tested in `if`, so detect it here.
+        run: |
+          if [ -n "$CSC_LINK" ]; then
+            export REQUIRE_NOTARIZED=1
+          fi
+          node scripts/verify-release-signing.cjs
         env:
-          REQUIRE_NOTARIZED: ${{ secrets.MAC_CSC_LINK != '' && '1' || '' }}
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
 
       - name: Upload artifacts to the release
         run: |
