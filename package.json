@@ -46,7 +46,7 @@
       "notarize": true
     },
     "dmg": {
-      "artifactName": "${productName}-${version}-mac.${ext}",
+      "artifactName": "${productName}-mac.${ext}",
       "writeUpdateInfo": false
     },
     "win": {

@@ -51,11 +51,13 @@ console.log(`Verifying signing of: ${appPath}${REQUIRE_NOTARIZED ? ' (notarizati
 let failed = false;
 
 // 1 — signature must exist and NOT be ad-hoc ("Signature=adhoc" means unsigned by Apple)
+// NOTE: codesign prints "Signature=adhoc" and "TeamIdentifier=" on STDERR even
+// on success — merge 2>&1 through the shell or the ad-hoc check silently fails.
 let sigInfo = '';
 try {
-  sigInfo = execSync(`codesign --display --verbose=4 "${appPath}"`, { stdio: 'pipe' }).toString();
+  sigInfo = execSync(`codesign --display --verbose=4 "${appPath}" 2>&1`, { stdio: 'pipe' }).toString();
 } catch (e) {
-  sigInfo = (e.stdout || '').toString() + (e.stderr || '').toString();
+  sigInfo = ((e.stdout || '') + (e.stderr || '')).toString();
 }
 const adhoc = /Signature=adhoc/i.test(sigInfo);
 const teamIdMatch = sigInfo.match(/TeamIdentifier=(\S+)/);
