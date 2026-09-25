@@ -1,8 +1,8 @@
 {
-  "enabled": false,
-  "id": "example-2026-09-16",
-  "title": "Hello from Snippetz Labs",
-  "body": "This is how you talk to every installed Ovio at once. Edit this file, flip enabled to true, commit — and every app pops this message within its next check.",
-  "ctaLabel": "",
-  "ctaUrl": ""
+  "enabled": true,
+  "id": "gatekeeper-help-2026-09-25",
+  "title": "Seeing \"Apple could not verify Ovio\"?",
+  "body": "That's macOS Gatekeeper — expected for open-source apps without a paid Apple certificate, and completely harmless. Click Done (never Move to Trash), then open System Settings → Privacy & Security and click Open Anyway. Ovio opens normally from then on.",
+  "ctaLabel": "Full guide",
+  "ctaUrl": "https://github.com/pulakit001/ovio#install"
 }

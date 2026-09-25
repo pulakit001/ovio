@@ -1,0 +1,41 @@
+name: Verify mac signing
+
+# Runs on every push to main: builds the app and checks the packaging +
+# signing pipeline is intact. With signing secrets configured it produces a
+# fully-notarized build and hard-fails if notarization ever breaks; without
+# secrets it still verifies the build is at least ad-hoc signed (runs on
+# Apple Silicon) so packaging regressions are caught early.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web assets
+        run: npm run build
+
+      - name: Build + sign + notarize mac app
+        run: npx electron-builder --mac --publish never
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Verify signing + notarization (hard gate)
+        run: node scripts/verify-release-signing.cjs

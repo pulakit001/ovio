@@ -1,0 +1,65 @@
+name: Release
+
+# Publishes the mac build to GitHub Releases.
+#
+# Two modes, automatic:
+#  - Secrets present (MAC_CSC_LINK + Apple creds) → build is Developer-ID
+#    signed AND notarized, then verified with a hard gate before upload.
+#    Users get NO Gatekeeper dialog.
+#  - No secrets → ad-hoc signed build is published as today. Users see the
+#    one-time "Apple could not verify" dialog and bypass via System Settings
+#    → Privacy & Security → Open Anyway (documented in README + the in-app
+#    updater popup). This stays honest: CI never CLAIMS notarization it
+#    didn't do.
+#
+# Single build → verify → upload with gh CLI (no second electron-builder run,
+# which would overwrite the signed app).
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build, sign (and notarize if secrets exist)
+        run: npx electron-builder --mac --publish never
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Verify signing (hard gate when a cert is configured)
+        run: node scripts/verify-release-signing.cjs
+        env:
+          REQUIRE_NOTARIZED: ${{ secrets.MAC_CSC_LINK != '' && '1' || '' }}
+
+      - name: Upload artifacts to the release
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          gh release view "v$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "v$TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "Ovio v$TAG — for macOS" --generate-notes
+          gh release upload "v$TAG" \
+            release/Ovio-mac.dmg release/Ovio-mac.zip release/latest-mac.yml \
+            --repo "$GITHUB_REPOSITORY" --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

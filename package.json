@@ -8,6 +8,7 @@
     "build": "vite build",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "electron:build": "vite build && electron-builder",
+    "verify:signing": "node scripts/verify-release-signing.cjs",
     "test:parakeet": "node scripts/test-parakeet.mjs"
   },
   "dependencies": {
@@ -37,8 +38,12 @@
     "mac": {
       "icon": "build/icon",
       "category": "public.app-category.productivity",
-      "identity": null,
-      "artifactName": "${productName}-${version}-mac.${ext}"
+      "artifactName": "${productName}-mac.${ext}",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
+      "notarize": true
     },
     "dmg": {
       "artifactName": "${productName}-${version}-mac.${ext}",
@@ -60,6 +65,6 @@
         "to": "parakeet_server.py"
       }
     ],
-    "afterSign": "build/afterSign.cjs"
+    "afterPack": "build/afterPack.cjs"
   }
 }

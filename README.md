@@ -106,19 +106,21 @@ it, ship your own build — that's the point.
 1. Open the DMG, drag **Ovio** into **Applications**, eject the DMG.
 2. Launch from Applications — **never from inside the DMG window**.
 
-> **The "Apple could not verify Ovio" dialog — read this once.** The build is
-> not yet notarized (no paid Apple Developer certificate), so macOS shows a
-> malware warning on first open. It is expected and harmless: Ovio is MIT
-> open source. On the dialog click **Done** — *never* "Move to Trash" — then
-> either click **Open Anyway** in System Settings → Privacy & Security, or run:
+> **The "Apple could not verify Ovio" dialog — read this once.** Ovio is built
+> by an open-source project without a paid Apple Developer certificate, so
+> macOS shows a malware warning on first open. It is expected and harmless:
+> Ovio is MIT open source, fully auditable. On the dialog click **Done** —
+> *never* "Move to Trash" — then either click **Open Anyway** in System
+> Settings → Privacy & Security, or run:
 >
 > ```bash
 > xattr -cr /Applications/Ovio.app
 > ```
 >
-> After that, Ovio opens normally every time. The dialog disappears forever
-> once the app is Developer-ID signed — the build pipeline notarizes
-> automatically whenever a certificate is configured.
+> After that, Ovio opens normally every time. The signing pipeline in this
+> repo (GitHub Actions `Release` workflow) notarizes automatically whenever
+> a Developer ID certificate is configured — until then, the bypass above is
+> the one-time cost of running cert-free open-source software.
 
 **Local STT models** download on demand in-app (Parakeet ≈ 2.5 GB with runtime;
 Whisper Small ≈ 466 MB, Turbo ≈ 1.6 GB) — the app itself stays small.
@@ -130,6 +132,25 @@ git clone https://github.com/pulakit001/ovio.git
 cd ovio && npm install
 npm run electron:dev      # development
 npm run electron:build    # DMG + zip in /release
+```
+
+### Release signing (why there's no Gatekeeper warning)
+
+Official mac builds are Developer-ID signed and notarized automatically:
+
+- **Locally** — install a Developer ID Application certificate in your
+  keychain and set `APPLE_ID` + `APPLE_APP_SPECIFIC_PASSWORD` +
+  `APPLE_TEAM_ID` (or a notarytool keychain profile). `npm run
+  electron:build` then signs, notarizes, and staples the DMG on its own.
+- **On GitHub Actions** — the `Release` workflow (tag a `v*` push) builds,
+  signs, notarizes, **verifies with a hard gate**, and only then publishes.
+  Required secrets: `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD`, `APPLE_ID`,
+  `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`.
+
+Before publishing anything, verify a build by hand:
+
+```bash
+npm run verify:signing   # exits non-zero unless signed + notarized
 ```
 
 ### Architecture
