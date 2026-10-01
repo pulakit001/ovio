@@ -58,10 +58,16 @@ ok "Downloaded $(du -h "$DMG_PATH" | cut -f1 | tr -d ' ')"
 
 # --- 4. Mount, install, unmount ---------------------------------------------
 log "Mounting DMG…"
-MOUNT_DIR=$(hdiutil attach "$DMG_PATH" -nobrowse -readonly -quiet \
-  | tail -1 | cut -f3-) \
-  || die "Could not mount the DMG."
-[[ -d "$MOUNT_DIR" ]] || MOUNT_DIR="/Volumes/${APP_NAME} 1.3.1-arm64"
+hdiutil attach "$DMG_PATH" -nobrowse -readonly -quiet || die "Could not mount the DMG."
+
+# Find the mounted volume robustly (hdiutil output parsing breaks on spaces,
+# and already-mounted volumes make the volume name unpredictable). We just
+# mounted it, so the volume containing Ovio.app is THE one to use.
+MOUNT_DIR=""
+for v in /Volumes/*; do
+  [[ -d "$v/${APP_NAME}.app" ]] && MOUNT_DIR="$v" && break
+done
+[[ -n "$MOUNT_DIR" ]] || die "Mounted DMG has no ${APP_NAME}.app inside — unexpected DMG layout."
 [[ -d "${MOUNT_DIR}/${APP_NAME}.app" ]] || die "Unexpected DMG layout — ${APP_NAME}.app not found."
 
 log "Installing to ${INSTALL_DIR}…"
