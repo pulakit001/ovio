@@ -99,28 +99,40 @@ it, ship your own build — that's the point.
 
 ## Install
 
+### Option A — one-line install (recommended, no Gatekeeper dialog)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/pulakit001/ovio/main/scripts/install.sh | bash
+```
+
+Downloads the latest release, installs it to `/Applications`, and launches Ovio —
+**the "Apple could not verify" dialog never appears**, because the installer
+clears the quarantine attribute before the app is ever opened. Your existing
+recordings/history are never touched. Works on any Apple Silicon Mac running
+macOS 13+.
+
+> Piping curl to bash executes a remote script on your machine. That's how many
+> OSS tools install (`rustup`, `brew`, `nvm`…). The script is short, readable,
+> and lives in this repo — [read it first](scripts/install.sh) if you prefer.
+
+### Option B — download the DMG
+
 **[Download Ovio-mac.dmg](https://github.com/pulakit001/ovio/releases/latest/download/Ovio-mac.dmg)**
 (≈100 MB, Apple Silicon) — or browse all files on the
 **[Releases page](https://github.com/pulakit001/ovio/releases)**.
 
 1. Open the DMG, drag **Ovio** into **Applications**, eject the DMG.
 2. Launch from Applications — **never from inside the DMG window**.
+3. On first launch, click **Done** on the verification dialog (*never* "Move to
+   Trash"), then either click **Open Anyway** in System Settings → Privacy &
+   Security, or run `xattr -cr /Applications/Ovio.app`. One time only — after
+   that it opens normally forever.
 
-> **The "Apple could not verify Ovio" dialog — read this once.** Ovio is built
-> by an open-source project without a paid Apple Developer certificate, so
-> macOS shows a malware warning on first open. It is expected and harmless:
-> Ovio is MIT open source, fully auditable. On the dialog click **Done** —
-> *never* "Move to Trash" — then either click **Open Anyway** in System
-> Settings → Privacy & Security, or run:
->
-> ```bash
-> xattr -cr /Applications/Ovio.app
-> ```
->
-> After that, Ovio opens normally every time. The signing pipeline in this
-> repo (GitHub Actions `Release` workflow) notarizes automatically whenever
-> a Developer ID certificate is configured — until then, the bypass above is
-> the one-time cost of running cert-free open-source software.
+> **Why the dialog appears for DMG installs only.** Ovio has no paid Apple
+> Developer certificate (it's free open source), so macOS shows a one-time
+> warning on apps downloaded through a browser. The terminal installer
+> (Option A) avoids it entirely; the DMG route just needs the 10-second
+> bypass above. Full context in the release notes.
 
 **Local STT models** download on demand in-app (Parakeet ≈ 2.5 GB with runtime;
 Whisper Small ≈ 466 MB, Turbo ≈ 1.6 GB) — the app itself stays small.
