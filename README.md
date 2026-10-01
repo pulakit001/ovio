@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="#license"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
-  <a href="https://github.com/pulakit001/ovio/releases"><img alt="Download" src="https://img.shields.io/badge/download-latest%20DMG-3B82F6.svg"></a>
+  <a href="#build-from-source"><img alt="Build from source" src="https://img.shields.io/badge/build-from%20source-3B82F6.svg"></a>
   <img alt="Platform: macOS" src="https://img.shields.io/badge/platform-macOS-black.svg">
   <img alt="Electron 33" src="https://img.shields.io/badge/Electron-33-47848F.svg">
 </p>
@@ -99,40 +99,21 @@ it, ship your own build — that's the point.
 
 ## Install
 
-### Option A — one-line install (recommended, no Gatekeeper dialog)
+Ovio is **build-from-source** — there are no prebuilt binaries in this repo.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pulakit001/ovio/main/scripts/install.sh | bash
+git clone https://github.com/pulakit001/ovio.git
+cd ovio && npm install
+npm run electron:build    # builds the app into /release
 ```
 
-Downloads the latest release, installs it to `/Applications`, and launches Ovio —
-**the "Apple could not verify" dialog never appears**, because the installer
-clears the quarantine attribute before the app is ever opened. Your existing
-recordings/history are never touched. Works on any Apple Silicon Mac running
-macOS 13+.
+The built app lands in `release/mac-arm64/Ovio.app` — drag it to
+`/Applications` and you're done.
 
-> Piping curl to bash executes a remote script on your machine. That's how many
-> OSS tools install (`rustup`, `brew`, `nvm`…). The script is short, readable,
-> and lives in this repo — [read it first](scripts/install.sh) if you prefer.
-
-### Option B — download the DMG
-
-**[Download Ovio-mac.dmg](https://github.com/pulakit001/ovio/releases/latest/download/Ovio-mac.dmg)**
-(≈100 MB, Apple Silicon) — or browse all files on the
-**[Releases page](https://github.com/pulakit001/ovio/releases)**.
-
-1. Open the DMG, drag **Ovio** into **Applications**, eject the DMG.
-2. Launch from Applications — **never from inside the DMG window**.
-3. On first launch, click **Done** on the verification dialog (*never* "Move to
-   Trash"), then either click **Open Anyway** in System Settings → Privacy &
-   Security, or run `xattr -cr /Applications/Ovio.app`. One time only — after
-   that it opens normally forever.
-
-> **Why the dialog appears for DMG installs only.** Ovio has no paid Apple
-> Developer certificate (it's free open source), so macOS shows a one-time
-> warning on apps downloaded through a browser. The terminal installer
-> (Option A) avoids it entirely; the DMG route just needs the 10-second
-> bypass above. Full context in the release notes.
+> Building locally produces an ad-hoc signed app: macOS will show a one-time
+> security prompt on first open — click **Done** (never "Move to Trash"), then
+> **Open Anyway** in System Settings → Privacy & Security, or run
+> `xattr -cr /Applications/Ovio.app`. One time only.
 
 **Local STT models** download on demand in-app (Parakeet ≈ 2.5 GB with runtime;
 Whisper Small ≈ 466 MB, Turbo ≈ 1.6 GB) — the app itself stays small.
