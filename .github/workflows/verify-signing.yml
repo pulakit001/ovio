@@ -45,5 +45,12 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
+      - name: Smoke-check the packaged app
+        run: |
+          APP="release/mac-arm64/Ovio.app"
+          npx --yes @electron/asar list "${APP}/Contents/Resources/app.asar" | grep -q "^/dist/index.html$" \
+            || { echo "✖ dist/index.html is NOT in the asar — the app would open blank."; exit 1; }
+          echo "✔ dist/index.html is packaged — renderer present."
+
       - name: Verify signing + notarization (hard gate)
         run: node scripts/verify-release-signing.cjs

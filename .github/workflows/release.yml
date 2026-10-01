@@ -38,6 +38,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build renderer (vite)
+        # Without this the asar has no dist/ and the app opens as a blank
+        # screen — electron-builder packs whatever is on disk, so the vite
+        # build MUST run in the same job as packaging.
+        run: npm run build
+
       - name: Build, sign (and notarize if secrets exist)
         # GitHub sets missing secrets as EMPTY strings; electron-builder treats
         # an empty CSC_LINK as a file path and fails. Unset the empties first.
@@ -54,6 +60,14 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Smoke-check the packaged app
+        # Hard gate: the renderer must actually be inside the asar.
+        run: |
+          APP="release/mac-arm64/Ovio.app"
+          npx --yes @electron/asar list "${APP}/Contents/Resources/app.asar" | grep -q "^/dist/index.html$" \
+            || { echo "✖ dist/index.html is NOT in the asar — the app would open blank."; exit 1; }
+          echo "✔ dist/index.html is packaged — renderer present."
 
       - name: Verify signing (hard gate when a cert is configured)
         # The gate needs to know whether a cert was SUPPOSED to be used. A
