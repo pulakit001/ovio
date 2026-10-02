@@ -123,8 +123,15 @@ Whisper Small ≈ 466 MB, Turbo ≈ 1.6 GB) — the app itself stays small.
 ```bash
 git clone https://github.com/pulakit001/ovio.git
 cd ovio && npm install
-npm run electron:dev      # development
-npm run electron:build    # DMG + zip in /release
+npm run electron:dev
+```
+
+Or build the packaged app (lands in `release/mac-arm64/Ovio.app`):
+
+```bash
+git clone https://github.com/pulakit001/ovio.git
+cd ovio && npm install
+npm run electron:build
 ```
 
 ### Release signing (why there's no Gatekeeper warning)
