@@ -104,7 +104,7 @@ Ovio is **build-from-source** — there are no prebuilt binaries in this repo.
 ```bash
 git clone https://github.com/pulakit001/ovio.git
 cd ovio && npm install
-npm run electron:build    # builds the app into /release
+npm run electron:build
 ```
 
 The built app lands in `release/mac-arm64/Ovio.app` — drag it to
