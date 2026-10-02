@@ -274,7 +274,7 @@ function AppShell() {
 }
 button { -webkit-tap-highlight-color: transparent; font-family: inherit; }
 button:active { transform: scale(0.955); }
-button:focus-visible { outline: 2px solid rgba(47,107,255,0.45); outline-offset: 2px; }
+button:focus-visible { outline: 2px solid rgba(86,120,154,0.45); outline-offset: 2px; }
 /* Settings → Animation level. Applied on the app root so EVERY view, pill,
    toast and popup obeys. Levels are deliberately very different:
    • reduced — looping pulses/waves stop after one play, transitions snap to
@@ -333,7 +333,7 @@ button:focus-visible { outline: 2px solid rgba(47,107,255,0.45); outline-offset:
               fontSize: 12, fontWeight: 600, borderRadius: 999, padding: "5px 13px",
               cursor: "pointer", fontFamily: FONT,
               transition: "background 220ms ease, color 220ms ease, transform 160ms cubic-bezier(.16,1,.3,1), box-shadow 220ms ease",
-              boxShadow: view === v.id ? "inset 0 0 0 1px rgba(47,107,255,0.45)" : "none",
+              boxShadow: view === v.id ? "inset 0 0 0 1px rgba(86,120,154,0.45)" : "none",
             }}
           >
             {v.icon}
@@ -631,10 +631,10 @@ function ModelDownloadToast() {
     }}>
       <div style={{
         width: 32, height: 32, borderRadius: 10, flexShrink: 0,
-        background: dl ? COLORS.accentSoft : "rgba(50,213,131,0.16)",
+        background: COLORS.surface2, border: `1px solid ${COLORS.border}`,
         display: "flex", alignItems: "center", justifyContent: "center",
       }}>
-        {done ? <Check size={16} color={COLORS.green} /> : <Download size={15} color={COLORS.blueBright} />}
+        {done ? <Check size={16} color={COLORS.textSecondary} /> : <Download size={15} color={COLORS.textSecondary} />}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 12.5, fontWeight: 600 }}>

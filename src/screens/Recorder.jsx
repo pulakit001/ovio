@@ -147,7 +147,7 @@ function InlineCreateRow({ placeholder, indent, onConfirm, onCancel }) {
         placeholder={placeholder}
         style={{
           flex: 1,
-          border: `1px solid ${COLORS.blue}`,
+          border: `1px solid ${COLORS.borderStrong}`,
           outline: "none",
           fontSize: 12.5,
           fontFamily: FONT,
@@ -231,7 +231,7 @@ function GeneratingPanel({ progress }) {
             style={{
               height: "100%",
               width: `${percent}%`,
-              background: `linear-gradient(90deg, ${COLORS.accent}, #4D8DFF)`,
+              background: `linear-gradient(90deg, ${COLORS.accent}, #7E9BBA)`,
               borderRadius: 2,
               transition: "width 700ms cubic-bezier(0.22, 1, 0.36, 1)",
             }}
@@ -738,7 +738,7 @@ function VaultSection({ files, busy, onAdd, onView, onRemove, open, onToggle }) 
             cursor: busy ? "wait" : "pointer", fontFamily: "inherit",
             transition: "color 150ms ease, border-color 150ms ease",
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = COLORS.text; e.currentTarget.style.borderColor = COLORS.blue; }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = COLORS.text; e.currentTarget.style.borderColor = COLORS.borderStrong; }}
           onMouseLeave={(e) => { e.currentTarget.style.color = COLORS.textSecondary; e.currentTarget.style.borderColor = COLORS.borderStrong; }}
         >
           <Paperclip size={11} /> {busy ? "Adding…" : "Add"}
@@ -2004,7 +2004,7 @@ export default function MacNoteTaker({
                     display: "flex", alignItems: "center", gap: 9, marginBottom: 10,
                     padding: "10px 11px", cursor: "pointer",
                     borderRadius: 12,
-                    border: `1px solid ${isSel ? COLORS.blue : COLORS.border}`,
+                    border: `1px solid ${isSel ? COLORS.borderStrong : COLORS.border}`,
                     background: isSel ? COLORS.selected : COLORS.surface,
                     boxShadow: "none",
                     transition: "border-color 200ms ease, background 200ms ease, box-shadow 220ms ease",
@@ -2014,7 +2014,7 @@ export default function MacNoteTaker({
                 >
                   <div style={{
                     width: 30, height: 30, borderRadius: 9, flexShrink: 0,
-                    background: COLORS.accentSoft, border: `1px solid rgba(47,107,255,0.4)`,
+                    background: COLORS.accentSoft, border: `1px solid rgba(86,120,154,0.4)`,
                     display: "flex", alignItems: "center", justifyContent: "center",
                   }}>
                     <Inbox size={15} color={COLORS.blueBright} />
@@ -2067,7 +2067,7 @@ export default function MacNoteTaker({
                       onMouseLeave={(e) => { setHoveredId(null); if (!expanded[p.id]) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.transform = "translateX(0)"; } }}
                     >
                       <ChevronRight size={13} color={COLORS.textTertiary} style={{ transition: "transform 150ms ease", transform: expanded[p.id] ? "rotate(90deg)" : "rotate(0deg)" }} />
-                      <Folder size={15} color={COLORS.blue} strokeWidth={1.8} style={{ fill: "none" }} />
+                      <Folder size={15} color={COLORS.textSecondary} strokeWidth={1.8} style={{ fill: "none" }} />
                       <span style={{ fontSize: 13, color: COLORS.text, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 500 }}>{p.name}</span>
                       {hoveredId === p.id && (
                         <IconButton onClick={(e) => { e.stopPropagation(); startRename({ kind: "project", id: p.id }); }} title="Rename project" small><Pencil size={11} /></IconButton>
@@ -2103,7 +2103,7 @@ export default function MacNoteTaker({
                                   display: "flex", alignItems: "center", gap: 6,
                                   padding: "5px 8px", marginLeft: 16, borderRadius: 6,
                                   cursor: "pointer", height: 24,
-                                  background: selectedSubprojectId === s.id ? COLORS.blue : "transparent",
+                                  background: selectedSubprojectId === s.id ? COLORS.borderStrong : "transparent",
                                   animation: flashSid === s.id && selectedSubprojectId !== s.id ? "ovioFlash 1.4s ease-out 0.25s" : undefined,
                                 }}
                                 onMouseEnter={(e) => { setHoveredId(s.id); if (selectedSubprojectId !== s.id) e.currentTarget.style.background = "rgba(255,255,255,0.1)"; }}
@@ -2146,7 +2146,7 @@ export default function MacNoteTaker({
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.windowBg }}>
             {noApiKey ? (
               <div style={{ ...stepIn(0), display: "flex", flexDirection: "column", alignItems: "center", gap: 10, textAlign: "center" }}>
-                <div style={{ width: 48, height: 48, borderRadius: 12, background: `${COLORS.blue}10`, display: "flex", alignItems: "center", justifyContent: "center", animation: "ovioFloat 3s ease-in-out infinite" }}>
+                <div style={{ width: 48, height: 48, borderRadius: 12, background: COLORS.surface2, border: `1px solid ${COLORS.border}`, display: "flex", alignItems: "center", justifyContent: "center", animation: "ovioFloat 3s ease-in-out infinite" }}>
                   <Brain size={22} color={COLORS.blue} />
                 </div>
                 <div style={{ fontWeight: 600, color: COLORS.text, fontSize: 15 }}>Add an API key to get started</div>
@@ -2199,7 +2199,7 @@ export default function MacNoteTaker({
                     cursor: vaultBusy ? "wait" : "pointer",
                     transition: "transform 120ms ease, border-color 160ms ease, background 160ms ease",
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = COLORS.blue; e.currentTarget.style.transform = "translateY(-1px)"; }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = COLORS.borderStrong; e.currentTarget.style.transform = "translateY(-1px)"; }}
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor = COLORS.borderStrong; e.currentTarget.style.transform = "translateY(0)"; }}
                 >
                   <Paperclip size={13} /> Add Files
@@ -2218,7 +2218,7 @@ export default function MacNoteTaker({
                     opacity: eligibleRecordings.length === 0 ? 0.55 : 1,
                     transition: "transform 120ms ease, border-color 160ms ease, background 160ms ease",
                   }}
-                  onMouseEnter={(e) => { if (eligibleRecordings.length > 0) { e.currentTarget.style.borderColor = COLORS.blue; e.currentTarget.style.transform = "translateY(-1px)"; } }}
+                  onMouseEnter={(e) => { if (eligibleRecordings.length > 0) { e.currentTarget.style.borderColor = COLORS.borderStrong; e.currentTarget.style.transform = "translateY(-1px)"; } }}
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor = COLORS.borderStrong; e.currentTarget.style.transform = "translateY(0)"; }}
                 >
                   <Layers size={13} /> Combine Notes

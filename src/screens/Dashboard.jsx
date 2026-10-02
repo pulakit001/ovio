@@ -25,15 +25,15 @@ import { COLORS as T, FONT as FONT_T, GRADIENTS } from "../ui/theme";
 // picked up. The two extra keys are theme-constant blue tints.
 const makeColors = () => ({
   ...T,
-  noteHighlight: "rgba(47,107,255,0.08)",
-  noteBorder: "rgba(47,107,255,0.22)",
+  noteHighlight: "rgba(86,120,154,0.08)",
+  noteBorder: "rgba(86,120,154,0.22)",
 });
 let COLORS = makeColors();
 
 // Categorical chart palette — one hue, an opacity/brightness ladder. The
 // light-mode entries sit at the front so early indices stay readable on white.
-const DEPT_COLORS_DARK = ["#8AB0FF", "#5B93FF", "#2F6BFF", "#2257DB", "#1A44AD", "#153483", "#10255C", "#0B1A3D"];
-const DEPT_COLORS_LIGHT = ["#2F6BFF", "#2257DB", "#1A44AD", "#4D8DFF", "#7FA8FF", "#A9C4FF", "#153483", "#10255C"];
+const DEPT_COLORS_DARK = ["#8AB0FF", "#5B93FF", "#56789A", "#2257DB", "#1A44AD", "#153483", "#10255C", "#0B1A3D"];
+const DEPT_COLORS_LIGHT = ["#56789A", "#2257DB", "#1A44AD", "#7E9BBA", "#7FA8FF", "#A9C4FF", "#153483", "#10255C"];
 const deptColors = () => (T.windowBg.startsWith("#F") ? DEPT_COLORS_LIGHT : DEPT_COLORS_DARK);
 
 const FONT = FONT_T;
@@ -86,9 +86,9 @@ const DASH_CSS = `
   transition: border-color 220ms ease, box-shadow 260ms ease, transform 240ms cubic-bezier(.16,1,.3,1);
 }
 .ovio-hero-card:hover {
-  border-color: rgba(77,141,255,0.5);
   
-  transform: translateY(-2px);
+  
+  
 }
 .ovio-panel {
   background: linear-gradient(180deg, rgba(255,255,255,0.015) 0%, rgba(255,255,255,0) 30%), var(--ovio-surface);
@@ -155,7 +155,7 @@ function StatCard({ label, value, sub, onClick, subtitle, animate, delay = 0, sp
       style={{
         flex: "1 1 200px", minWidth: 190,
         background: "linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0) 40%), var(--ovio-surface)",
-        border: `1px solid ${lift ? "rgba(77,141,255,0.5)" : COLORS.border}`,
+        border: `1px solid ${lift ? COLORS.borderStrong : COLORS.border}`,
         borderRadius: 22,
         padding: "18px 20px 14px",
         display: "flex", flexDirection: "column", gap: 6,
@@ -274,8 +274,8 @@ function MeetingRow({ rec, onSelect }) {
         </div>
       </div>
       {rec.aiNotes && (
-        <div style={{ width: 24, height: 24, borderRadius: 6, background: `${COLORS.blue}14`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <Brain size={12} color={COLORS.blue} />
+        <div style={{ width: 24, height: 24, borderRadius: 6, background: COLORS.surface2, border: `1px solid ${COLORS.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Brain size={12} color={COLORS.textSecondary} />
         </div>
       )}
       <ChevronRight size={14} color={COLORS.textTertiary} />
@@ -552,7 +552,7 @@ export default function Dashboard({ projects, recordingsBySub, setRecordingsBySu
               onClick={() => setAnalytics({ kind: "departments" })}
               title="Open the full department analysis"
               style={{ flex: "1 1 320px", minWidth: 300, padding: "16px 18px", cursor: "pointer", transition: "border-color 200ms ease, box-shadow 240ms ease", animation: "ovioRiseSoft 600ms cubic-bezier(.16,1,.3,1) 320ms both" }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(77,141,255,0.45)";  }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(126,155,186,0.45)";  }}
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = COLORS.border; e.currentTarget.style.boxShadow = "none"; }}
             >
               <div style={{ fontSize: 12, fontWeight: 600, color: COLORS.textSecondary, marginBottom: 14, display: "flex", alignItems: "center", gap: 6 }}>
@@ -575,22 +575,22 @@ export default function Dashboard({ projects, recordingsBySub, setRecordingsBySu
             className="ovio-hero-card"
             style={{
               display: "flex", alignItems: "center", gap: 14,
-              background: "linear-gradient(120deg, rgba(47,107,255,0.10) 0%, rgba(47,107,255,0.03) 45%, rgba(255,255,255,0) 100%), var(--ovio-surface)",
-              border: `1px solid ${inboxOpen ? COLORS.blue : COLORS.border}`,
+              background: "var(--ovio-surface)",
+              border: `1px solid ${inboxOpen ? COLORS.borderStrong : COLORS.border}`,
               boxShadow: "none",
               borderRadius: 20, padding: "16px 18px", cursor: "pointer",
-              transition: "border-color 200ms ease, box-shadow 220ms ease, transform 240ms cubic-bezier(.16,1,.3,1)",
+              transition: "border-color 200ms ease, transform 240ms cubic-bezier(.16,1,.3,1)",
             }}
-            onMouseEnter={(e) => { if (!inboxOpen) e.currentTarget.style.borderColor = "rgba(77,141,255,0.45)"; }}
+            onMouseEnter={(e) => { if (!inboxOpen) e.currentTarget.style.borderColor = COLORS.borderStrong; }}
             onMouseLeave={(e) => { if (!inboxOpen) e.currentTarget.style.borderColor = COLORS.border; }}
           >
             <div style={{
               width: 42, height: 42, borderRadius: 13, flexShrink: 0,
-              background: COLORS.accentSoft, border: "1px solid rgba(47,107,255,0.4)",
+              background: COLORS.surface2, border: `1px solid ${COLORS.border}`,
               display: "flex", alignItems: "center", justifyContent: "center",
               
             }}>
-              <Inbox size={19} color={COLORS.blueBright} />
+              <Inbox size={19} color={COLORS.textSecondary} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -651,7 +651,7 @@ export default function Dashboard({ projects, recordingsBySub, setRecordingsBySu
                         borderRadius: 999, padding: "4px 10px", cursor: "pointer", fontFamily: FONT,
                         transition: "border-color 160ms ease, background 160ms ease",
                       }}
-                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = COLORS.blue; e.currentTarget.style.background = COLORS.accentSoft; }}
+                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = COLORS.borderStrong; }}
                       onMouseLeave={(e) => { e.currentTarget.style.borderColor = COLORS.borderStrong; e.currentTarget.style.background = "transparent"; }}
                     >
                       <FolderInput size={11} /> Move
@@ -681,7 +681,7 @@ export default function Dashboard({ projects, recordingsBySub, setRecordingsBySu
                     onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
                     {expandedDept === dept.id ? <ChevronDown size={14} color={COLORS.textTertiary} /> : <ChevronRight size={14} color={COLORS.textTertiary} />}
                     <div style={{ width: 32, height: 32, borderRadius: 9, background: COLORS.surface2, border: `1px solid ${COLORS.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <div style={{ width: 8, height: 8, borderRadius: 999, background: COLORS.blue,  }} />
+                      <div style={{ width: 8, height: 8, borderRadius: 999, background: COLORS.borderStrong, }} />
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 13.5, fontWeight: 600, color: COLORS.text }}>{dept.name}</div>
@@ -700,7 +700,7 @@ export default function Dashboard({ projects, recordingsBySub, setRecordingsBySu
                       </div>
                       <button onClick={(e) => { e.stopPropagation(); setAnalytics({ kind: "department", deptId: dept.id }); }}
                         title={`Open the full analysis for ${dept.name}`}
-                        style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 26, height: 26, border: `1px solid ${COLORS.borderStrong}`, background: "transparent", color: COLORS.blue, borderRadius: 7, cursor: "pointer", fontFamily: FONT }}
+                        style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 26, height: 26, border: `1px solid ${COLORS.borderStrong}`, background: "transparent", color: COLORS.textSecondary, borderRadius: 7, cursor: "pointer", fontFamily: FONT }}
                         onMouseEnter={(e) => { e.currentTarget.style.background = COLORS.surface3; }}
                         onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
                         <ArrowUpRight size={13} />
@@ -732,7 +732,7 @@ export default function Dashboard({ projects, recordingsBySub, setRecordingsBySu
                               ))}
                               {subRecs.length > 3 && (
                                 <div onClick={() => onNavigateToProject(dept.id, sub.id)}
-                                  style={{ padding: "6px 44px 6px 80px", fontSize: 11, color: COLORS.blue, cursor: "pointer" }}>
+                                  style={{ padding: "6px 44px 6px 80px", fontSize: 11, color: COLORS.textSecondary, cursor: "pointer" }}>
                                   View all {subRecs.length} recordings →
                                 </div>
                               )}
@@ -781,7 +781,7 @@ export default function Dashboard({ projects, recordingsBySub, setRecordingsBySu
         boxShadow: "0 12px 40px rgba(0,0,0,0.5)", fontFamily: FONT,
         animation: "ovioToastIn 380ms cubic-bezier(.16,1,.3,1) both",
       }}>
-        <Check size={13} color={COLORS.green} /> Moved to {transferred}
+        <Check size={13} color={COLORS.textSecondary} /> Moved to {transferred}
       </div>
     )}
     </>

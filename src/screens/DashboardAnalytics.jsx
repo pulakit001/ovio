@@ -20,8 +20,8 @@ import { COLORS as T, FONT as FONT_T } from "../ui/theme";
 const COLORS = T; // live theme tokens
 
 // Categorical chart palette — one hue, brightness ladder; light variant on paper.
-const DEPT_COLORS_DARK = ["#8AB0FF", "#5B93FF", "#2F6BFF", "#2257DB", "#1A44AD", "#153483", "#10255C", "#0B1A3D"];
-const DEPT_COLORS_LIGHT = ["#2F6BFF", "#2257DB", "#1A44AD", "#4D8DFF", "#7FA8FF", "#A9C4FF", "#153483", "#10255C"];
+const DEPT_COLORS_DARK = ["#8AB0FF", "#5B93FF", "#56789A", "#2257DB", "#1A44AD", "#153483", "#10255C", "#0B1A3D"];
+const DEPT_COLORS_LIGHT = ["#56789A", "#2257DB", "#1A44AD", "#7E9BBA", "#7FA8FF", "#A9C4FF", "#153483", "#10255C"];
 const deptColors = () => (T.windowBg.startsWith("#F") ? DEPT_COLORS_LIGHT : DEPT_COLORS_DARK);
 
 const FONT = FONT_T;
@@ -323,7 +323,7 @@ export function YearHeatmap({ recordings, now }) {
         )}
         <div style={{ flex: 1 }} />
         <span style={{ color: COLORS.textTertiary, fontSize: 10.5 }}>less</span>
-        {[{ b: COLORS.surface2 }, { b: "rgba(47,107,255,0.4)" }, { b: "rgba(47,107,255,0.75)" }].map((x, i) => (
+        {[{ b: COLORS.surface2 }, { b: "rgba(86,120,154,0.4)" }, { b: "rgba(86,120,154,0.75)" }].map((x, i) => (
           <span key={i} style={{ width: cell - 3, height: cell - 3, borderRadius: 3, background: x.b }} />
         ))}
         <span style={{ color: COLORS.textTertiary, fontSize: 10.5 }}>more</span>

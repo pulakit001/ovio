@@ -19,17 +19,17 @@ const DARK = {
   text: "#F5F6F8",
   textSecondary: "#9BA0AC",
   textTertiary: "#565B66",
-  blue: "#2F6BFF",
-  blueBright: "#4D8DFF",
-  accent: "#2F6BFF",
-  accentSoft: "rgba(47,107,255,0.12)",
-  selected: "rgba(47,107,255,0.16)",
+  blue: "#56789A",
+  blueBright: "#7E9BBA",
+  accent: "#56789A",
+  accentSoft: "rgba(86,120,154,0.12)",
+  selected: "rgba(86,120,154,0.16)",
   green: "#32D583",
   red: "#FF5D5D",
   orange: "#FF9F0A",
   purple: "#9B8AFF",
-  noteHighlight: "rgba(47,107,255,0.08)",
-  noteBorder: "rgba(47,107,255,0.22)",
+  noteHighlight: "rgba(86,120,154,0.08)",
+  noteBorder: "rgba(86,120,154,0.22)",
   glass: "rgba(17,18,22,0.85)",
   glassBorder: "rgba(255,255,255,0.12)",
   keycapBg: "#0A0B0E",
@@ -46,17 +46,17 @@ const LIGHT = {
   text: "#1A1B1E",
   textSecondary: "#5C6069",
   textTertiary: "#9CA0A8",
-  blue: "#2F6BFF",
+  blue: "#56789A",
   blueBright: "#1F5AF0",
-  accent: "#2F6BFF",
-  accentSoft: "rgba(47,107,255,0.10)",
-  selected: "rgba(47,107,255,0.13)",
+  accent: "#56789A",
+  accentSoft: "rgba(86,120,154,0.10)",
+  selected: "rgba(86,120,154,0.13)",
   green: "#1F9D5B",
   red: "#E5484D",
   orange: "#E8871A",
   purple: "#7C6AE8",
-  noteHighlight: "rgba(47,107,255,0.07)",
-  noteBorder: "rgba(47,107,255,0.25)",
+  noteHighlight: "rgba(86,120,154,0.07)",
+  noteBorder: "rgba(86,120,154,0.25)",
   glass: "rgba(255,255,255,0.88)",
   glassBorder: "rgba(20,18,12,0.1)",
   keycapBg: "#FFFFFF",
@@ -99,21 +99,21 @@ export const GRADIENTS = {
   get pageGlow() {
     if (currentMode === "light") {
       return (
-        "radial-gradient(120% 70% at 50% -10%, rgba(47,107,255,0.05) 0%, rgba(47,107,255,0.015) 38%, rgba(247,245,240,0) 70%), #F7F5F0"
+        "radial-gradient(120% 70% at 50% -10%, rgba(86,120,154,0.05) 0%, rgba(86,120,154,0.015) 38%, rgba(247,245,240,0) 70%), #F7F5F0"
       );
     }
     return (
-      "radial-gradient(120% 70% at 50% -10%, rgba(47,107,255,0.055) 0%, rgba(47,107,255,0.02) 38%, rgba(5,5,7,0) 70%), #050507"
+      "radial-gradient(120% 70% at 50% -10%, rgba(86,120,154,0.055) 0%, rgba(86,120,154,0.02) 38%, rgba(5,5,7,0) 70%), #050507"
     );
   },
   get cardGlow() {
     if (currentMode === "light") {
-      return "radial-gradient(90% 90% at 50% 0%, rgba(47,107,255,0.03) 0%, rgba(255,255,255,0) 60%)";
+      return "radial-gradient(90% 90% at 50% 0%, rgba(86,120,154,0.03) 0%, rgba(255,255,255,0) 60%)";
     }
-    return "radial-gradient(90% 90% at 50% 0%, rgba(47,107,255,0.04) 0%, rgba(17,18,22,0) 60%)";
+    return "radial-gradient(90% 90% at 50% 0%, rgba(86,120,154,0.04) 0%, rgba(17,18,22,0) 60%)";
   },
   orb:
-    "radial-gradient(circle at 32% 28%, #9DBAFF 0%, #4D8DFF 22%, #2F6BFF 45%, #1436A6 68%, #071233 100%)",
+    "radial-gradient(circle at 32% 28%, #A9BFD4 0%, #7E9BBA 22%, #56789A 45%, #27405C 68%, #0B1420 100%)",
 };
 
 // The glowing hero orb: layered radial gradients + blur. Drop into any
@@ -126,7 +126,7 @@ export function orbStyle(size = 260) {
     background: GRADIENTS.orb,
     filter: "blur(1px)",
     boxShadow:
-      "0 0 60px 12px rgba(47,107,255,0.45), 0 0 160px 40px rgba(47,107,255,0.18), inset 0 0 40px rgba(255,255,255,0.12)",
+      "0 0 60px 12px rgba(86,120,154,0.45), 0 0 160px 40px rgba(86,120,154,0.18), inset 0 0 40px rgba(255,255,255,0.12)",
     position: "relative",
   };
 }
@@ -204,7 +204,7 @@ export function glowHover(intensity = 1) {
 
 export function glowIn(intensity = 1) {
   return {
-    borderColor: `rgba(77,141,255,${0.5 * intensity})`,
+    borderColor: COLORS.borderStrong,
   };
 }
 

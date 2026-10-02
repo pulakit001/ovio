@@ -152,9 +152,9 @@ function TargetRow({ icon, name, sub, onChoose, picked, disabled, glow }) {
       disabled={disabled}
       style={{
         width: "100%", display: "flex", alignItems: "center", gap: 10, textAlign: "left",
-        border: `1px solid ${active ? COLORS.blue : hover ? COLORS.borderStrong : COLORS.border}`,
+        border: `1px solid ${active ? COLORS.borderStrong : hover ? COLORS.borderStrong : COLORS.border}`,
         background: active ? COLORS.selected : hover ? COLORS.surface2 : "transparent",
-        borderColor: active ? "rgba(77,141,255,0.55)" : COLORS.border,
+        borderColor: active ? "rgba(126,155,186,0.55)" : COLORS.border,
         borderRadius: 12, padding: "9px 11px", cursor: disabled ? "default" : "pointer",
         fontFamily: FONT, marginBottom: 4, opacity: disabled ? 0.35 : 1,
         transform: active ? "scale(1.015)" : "scale(1)",
@@ -182,7 +182,7 @@ function TargetRow({ icon, name, sub, onChoose, picked, disabled, glow }) {
       )}
       <MoveRight
         size={14}
-        color={active ? COLORS.blueBright : COLORS.textTertiary}
+        color={active ? COLORS.text : COLORS.textTertiary}
         style={{
           flexShrink: 0,
           transform: active ? "translateX(4px)" : hover ? "translateX(2px)" : "translateX(0)",

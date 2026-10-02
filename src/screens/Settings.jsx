@@ -32,7 +32,7 @@ function Toggle({ checked, onChange }) {
     <button onClick={() => onChange(!checked)} title={checked ? "Disable" : "Enable"}
       style={{
         width: 40, height: 22, borderRadius: 11, border: "none", position: "relative",
-        background: checked ? COLORS.blue : "rgba(255,255,255,0.14)", cursor: "pointer", flexShrink: 0,
+        background: checked ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.14)", cursor: "pointer", flexShrink: 0,
         boxShadow: "none",
         transition: "background 200ms ease, box-shadow 200ms ease",
       }}>
@@ -151,7 +151,7 @@ function TextAction({ onClick, children, danger }) {
       onClick={onClick}
       style={{
         fontSize: 11.5, fontWeight: 600, cursor: "pointer",
-        color: danger ? COLORS.red : COLORS.blue,
+        color: danger ? COLORS.red : COLORS.textSecondary,
       }}
     >
       {children}
@@ -196,7 +196,7 @@ function KeyRow({ entry, provider, onUpdate, onRemove, onToggle, last }) {
       <button onClick={() => onToggle(entry.id)} title="Toggle active"
         style={{
           width: 30, height: 18, borderRadius: 9, border: "none",
-          background: entry.active ? COLORS.green : COLORS.borderStrong,
+          background: entry.active ? "rgba(255,255,255,0.85)" : COLORS.borderStrong,
           cursor: "pointer", position: "relative", flexShrink: 0, transition: "background 150ms ease",
         }}>
         <div style={{
@@ -211,11 +211,11 @@ function KeyRow({ entry, provider, onUpdate, onRemove, onToggle, last }) {
               placeholder={provider === "groq" ? "AIza…" : "sk-or-v1-..."}
               style={{ flex: 1, border: `1px solid ${COLORS.borderStrong}`, outline: "none", fontSize: 12, fontFamily: FONT, color: COLORS.text, background: COLORS.surface, borderRadius: 6, padding: "6px 8px" }} />
             <button onClick={verify} disabled={verifying || !value.trim()}
-              style={{ border: "none", background: COLORS.blue, color: "#fff", fontSize: 11, fontWeight: 600, borderRadius: 6, padding: "6px 10px", cursor: "pointer", fontFamily: FONT }}>
+              style={{ border: `1px solid ${COLORS.borderStrong}`, background: COLORS.surface2, color: COLORS.text, fontSize: 11, fontWeight: 600, borderRadius: 6, padding: "6px 10px", cursor: "pointer", fontFamily: FONT }}>
               {verifying ? "…" : "Save"}
             </button>
             {status && (
-              <span style={{ fontSize: 11, color: status.ok ? COLORS.green : COLORS.red }}>{status.ok ? "✓" : "✗"}</span>
+              <span style={{ fontSize: 11, color: status.ok ? COLORS.textSecondary : COLORS.red }}>{status.ok ? "✓" : "✗"}</span>
             )}
           </div>
         ) : (
@@ -696,8 +696,9 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
                       onClick={onClick}
                       style={{
                         display: "flex", alignItems: "center", gap: 12,
-                        border: `1px solid ${sel ? COLORS.blue : COLORS.border}`,
-                        background: sel ? COLORS.selected : COLORS.surface,
+                        border: `1px solid ${sel ? COLORS.borderStrong : COLORS.border}`,
+                        
+                        background: sel ? "rgba(255,255,255,0.045)" : COLORS.surface,
                         borderRadius: 8, padding: "9px 12px", cursor: "pointer",
                         transition: "border-color 150ms ease",
                       }}
@@ -719,8 +720,8 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
                       {modelRow(
                         pkSelected,
                         "Parakeet-TDT v3",
-                        "Most accurate · streams live · ~2.5 GB",
-                        downloading || engineInstalling ? COLORS.blue : downloaded && engineReady ? COLORS.green : engineError ? COLORS.red : COLORS.textTertiary,
+                        "Streams live · ~2.5 GB",
+                        downloading || engineInstalling ? COLORS.textSecondary : engineError ? COLORS.red : COLORS.textTertiary,
                         engineError ? "Engine error"
                           : engineInstalling ? "Installing engine…"
                           : !engineReady ? "Engine not installed"
@@ -728,7 +729,7 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
                           : downloaded ? (pk?.server?.running ? "Ready · streaming" : "Ready")
                           : `Not downloaded · ${pk?.sizeLabel || "~2.5 GB"}`,
                         () => setLocalSttModel("parakeet"),
-                        <span style={{ fontSize: 9, fontWeight: 700, color: COLORS.blue, border: `1px solid ${COLORS.blue}`, borderRadius: 4, padding: "1px 4px", marginLeft: 6 }}>RECOMMENDED</span>,
+                        null,
                       )}
                       {(pkSelected && !engineReady && !engineInstalling) && (
                         <div style={{ fontSize: 11, color: COLORS.textSecondary, padding: "0 2px" }}>
@@ -749,8 +750,8 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
                       {modelRow(
                         lgSelected,
                         "Whisper Large v3",
-                        "Most accurate Whisper · ~3.1 GB",
-                        largeSt?.downloading ? COLORS.blue : largeSt?.downloaded ? COLORS.green : COLORS.textTertiary,
+                        "Whisper · ~3.1 GB",
+                        largeSt?.downloading ? COLORS.textSecondary : largeSt?.downloaded ? COLORS.textSecondary : COLORS.textTertiary,
                         largeSt?.downloading ? `Downloading… ${Math.round((largeSt?.progress || 0) * 100)}%`
                           : largeSt?.downloaded ? "Ready"
                           : "Not downloaded",
@@ -797,7 +798,7 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
                   placeholder="http://localhost:11434"
                   style={{ flex: 1, border: `1px solid ${COLORS.borderStrong}`, outline: "none", fontSize: 12, fontFamily: FONT, color: COLORS.text, background: COLORS.surface2, borderRadius: 7, padding: "6px 9px" }} />
                 <button onClick={checkOllamaConnection} disabled={checkingOllama}
-                  style={{ border: "none", background: COLORS.blue, color: "#fff", fontSize: 11.5, fontWeight: 600, borderRadius: 7, padding: "6px 12px", cursor: checkingOllama ? "default" : "pointer", fontFamily: FONT }}>
+                  style={{ border: `1px solid ${COLORS.borderStrong}`, background: COLORS.surface2, color: COLORS.text, fontSize: 11.5, fontWeight: 600, borderRadius: 7, padding: "6px 12px", cursor: checkingOllama ? "default" : "pointer", fontFamily: FONT }}>
                   {checkingOllama ? "…" : "Check"}
                 </button>
               </div>
@@ -835,7 +836,7 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
                       last={i === visible.length - 1 && otherInstalled.length === 0}
                     >
                       {isInstalled ? (
-                        <span style={{ fontSize: 11, fontWeight: 600, color: selected ? COLORS.green : COLORS.textTertiary }}>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: selected ? COLORS.text : COLORS.textTertiary }}>
                           {selected ? "Active" : "Ready"}
                         </span>
                       ) : (
@@ -874,7 +875,7 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
         <Group label="API Keys">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 14px 6px" }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: COLORS.textSecondary }}>Gemini</div>
-            <button onClick={() => setShowAddGroq((s) => !s)} style={{ display: "flex", alignItems: "center", gap: 4, border: "none", background: "transparent", color: COLORS.blue, fontSize: 12, cursor: "pointer", fontFamily: FONT }}>
+            <button onClick={() => setShowAddGroq((s) => !s)} style={{ display: "flex", alignItems: "center", gap: 4, border: "none", background: "transparent", color: COLORS.textSecondary, fontSize: 12, cursor: "pointer", fontFamily: FONT }}>
               <Plus size={13} /> Add
             </button>
           </div>
@@ -883,7 +884,7 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
               <input autoFocus value={newGroq} onChange={(e) => setNewGroq(e.target.value)}
                 placeholder="AIza…"
                 style={{ flex: 1, border: `1px solid ${COLORS.borderStrong}`, outline: "none", fontSize: 12, fontFamily: FONT, color: COLORS.text, background: COLORS.surface2, borderRadius: 6, padding: "6px 8px" }} />
-              <button onClick={addGroq} style={{ border: "none", background: COLORS.blue, color: "#fff", fontSize: 11, fontWeight: 600, borderRadius: 6, padding: "6px 10px", cursor: "pointer", fontFamily: FONT }}>Add</button>
+              <button onClick={addGroq} style={{ border: `1px solid ${COLORS.borderStrong}`, background: COLORS.surface2, color: COLORS.text, fontSize: 11, fontWeight: 600, borderRadius: 6, padding: "6px 10px", cursor: "pointer", fontFamily: FONT }}>Add</button>
             </div>
           )}
           {groqKeys.map((k, i) => (
@@ -895,7 +896,7 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 14px 6px", borderTop: `1px solid ${COLORS.border}` }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: COLORS.textSecondary }}>OpenRouter</div>
-            <button onClick={() => setShowAddOr((s) => !s)} style={{ display: "flex", alignItems: "center", gap: 4, border: "none", background: "transparent", color: COLORS.blue, fontSize: 12, cursor: "pointer", fontFamily: FONT }}>
+            <button onClick={() => setShowAddOr((s) => !s)} style={{ display: "flex", alignItems: "center", gap: 4, border: "none", background: "transparent", color: COLORS.textSecondary, fontSize: 12, cursor: "pointer", fontFamily: FONT }}>
               <Plus size={13} /> Add
             </button>
           </div>
@@ -904,7 +905,7 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
               <input autoFocus value={newOr} onChange={(e) => setNewOr(e.target.value)}
                 placeholder="sk-or-v1-..."
                 style={{ flex: 1, border: `1px solid ${COLORS.borderStrong}`, outline: "none", fontSize: 12, fontFamily: FONT, color: COLORS.text, background: COLORS.surface2, borderRadius: 6, padding: "6px 8px" }} />
-              <button onClick={addOr} style={{ border: "none", background: COLORS.blue, color: "#fff", fontSize: 11, fontWeight: 600, borderRadius: 6, padding: "6px 10px", cursor: "pointer", fontFamily: FONT }}>Add</button>
+              <button onClick={addOr} style={{ border: `1px solid ${COLORS.borderStrong}`, background: COLORS.surface2, color: COLORS.text, fontSize: 11, fontWeight: 600, borderRadius: 6, padding: "6px 10px", cursor: "pointer", fontFamily: FONT }}>Add</button>
             </div>
           )}
           {openrouterKeys.map((k, i) => (
@@ -1034,8 +1035,8 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
                 return (
                   <button key={p.id} onClick={() => applyAmbient({ enabled: true, chords: [p.id] })}
                     style={{
-                      border: `1px solid ${on ? COLORS.blue : COLORS.border}`,
-                      background: on ? COLORS.selected : COLORS.surface2,
+                      border: `1px solid ${on ? COLORS.borderStrong : COLORS.border}`,
+                      background: on ? "rgba(255,255,255,0.05)" : COLORS.surface2,
                       borderRadius: 7, padding: "5px 10px", fontSize: 11.5, fontWeight: on ? 600 : 500,
                       color: on ? COLORS.text : COLORS.textSecondary, cursor: "pointer", fontFamily: FONT,
                       transition: "border-color 150ms ease, background 150ms ease",
@@ -1047,10 +1048,10 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
               <button onClick={() => { setRecordingChord(true); setChordMsg(""); }}
                 style={{
                   display: "flex", alignItems: "center", gap: 5,
-                  border: `1px dashed ${recordingChord ? COLORS.blue : COLORS.borderStrong}`,
-                  background: recordingChord ? COLORS.selected : COLORS.surface2,
+                  border: `1px dashed ${recordingChord ? COLORS.textSecondary : COLORS.borderStrong}`,
+                  background: recordingChord ? "rgba(255,255,255,0.05)" : COLORS.surface2,
                   borderRadius: 7, padding: "5px 10px", fontSize: 11.5, fontWeight: 500,
-                  color: recordingChord ? COLORS.blue : COLORS.textSecondary, cursor: "pointer", fontFamily: FONT,
+                  color: recordingChord ? COLORS.text : COLORS.textSecondary, cursor: "pointer", fontFamily: FONT,
                 }}>
                 {recordingChord ? "Press keys now… (Esc)" : (<> <Wand2 size={11} /> Custom…</>)}
               </button>
@@ -1128,7 +1129,7 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
                   >
                     <div style={{
                       width: 26, height: 16, borderRadius: 8, position: "relative", flexShrink: 0,
-                      background: on ? COLORS.blue : COLORS.borderStrong, transition: "background 150ms ease",
+                      background: on ? "rgba(255,255,255,0.85)" : COLORS.borderStrong, transition: "background 150ms ease",
                     }}>
                       <div style={{ position: "absolute", top: 2, width: 12, height: 12, borderRadius: 999, background: "#fff", left: on ? 12 : 2, transition: "left 150ms ease" }} />
                     </div>
@@ -1153,7 +1154,7 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
             />
           </Row>
           {behaviorSaved && (
-            <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 14px 10px", fontSize: 11, color: COLORS.green }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 14px 10px", fontSize: 11, color: COLORS.textSecondary }}>
               <Check size={12} /> saved
             </div>
           )}

@@ -34,13 +34,13 @@ const ONBOARDING_CSS = `
 @keyframes ovioPop { 0% { transform: scale(.3); opacity: 0; } 60% { transform: scale(1.18); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
 @keyframes ovioOrbFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
 @keyframes ovioOrbMorph { 0%, 100% { border-radius: 44% 56% 52% 48% / 48% 46% 54% 52%; } 33% { border-radius: 56% 44% 46% 54% / 52% 56% 44% 48%; } 66% { border-radius: 48% 52% 58% 42% / 44% 50% 50% 56%; } }
-.ovio-card { transition: border-color 200ms ease, background 200ms ease, transform 200ms cubic-bezier(.16,1,.3,1), box-shadow 240ms ease; }
-.ovio-card:hover { transform: translateY(-2px); border-color: rgba(77,141,255,0.5); }
+.ovio-card { transition: border-color 200ms ease, background 200ms ease; }
+.ovio-card:hover { border-color: rgba(126,155,186,0.38); }
 @keyframes ovioRingPulse { 0% { transform: scale(1); opacity: .5; } 70% { transform: scale(1.42); opacity: 0; } 100% { transform: scale(1.42); opacity: 0; } }
 @keyframes ovioWave { 0%, 100% { transform: scaleY(.25); } 50% { transform: scaleY(1); } }
 @keyframes ovioSpringIn { 0% { opacity: 0; transform: translateY(22px) scale(.94); } 62% { opacity: 1; transform: translateY(-4px) scale(1.015); } 84% { transform: translateY(1.5px) scale(.998); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes ovioRecPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
-.ovio-ring { position: absolute; inset: 0; border: 2px solid ${COLORS.blueBright}; border-radius: 24%; animation: ovioRingPulse 2.8s cubic-bezier(.16,1,.3,1) infinite; pointer-events: none; }
+.ovio-ring { position: absolute; inset: 0; border: 2px solid rgba(126,155,186,0.35); border-radius: 24%; animation: ovioRingPulse 2.8s cubic-bezier(.16,1,.3,1) infinite; pointer-events: none; }
 .ovio-keycap { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 26px; padding: 0 8px; border-radius: 7px; background: var(--ovio-keycap-bg); border: 1px solid var(--ovio-border-strong); box-shadow: 0 2px 0 var(--ovio-border-strong); font-size: 12px; font-weight: 700; color: var(--ovio-text); letter-spacing: .3px; }
 /* Quiet scrollbar for the step column — the chunky default one read as a
    broken progress bar in the mode step. */
@@ -485,8 +485,8 @@ export default function Onboarding({ onComplete, onSkip, recStatus }) {
   const cardStyle = (selected) => ({
     flex: 1,
     position: "relative",
-    border: `1.5px solid ${selected ? COLORS.blue : COLORS.border}`,
-    background: selected ? COLORS.selected : COLORS.surface,
+    border: `1.5px solid ${selected ? COLORS.borderStrong : COLORS.border}`,
+    background: selected ? "rgba(255,255,255,0.045)" : COLORS.surface,
     boxShadow: "none",
     borderRadius: 16,
     padding: "14px",
@@ -554,24 +554,23 @@ export default function Onboarding({ onComplete, onSkip, recStatus }) {
       {/* Step content — Typeform-style: open centered column, no card box */}
       <div className="ovio-steps" style={{
         width: 560, maxWidth: "90%", maxHeight: "86vh", overflowY: "auto",
-        padding: "8px 0", display: "flex", flexDirection: "column", gap: 18,
+        padding: "8px 0", display: "flex", flexDirection: "column", gap: 18, alignItems: "center",
         animation: "ovioStepIn 450ms cubic-bezier(.22,1,.36,1) both",
       }} key={step}>
         {stepId === "welcome" && (
           <>
-            <div style={{ textAlign: "center", paddingTop: 10, ...fade(0) }}>
+            <div style={{ textAlign: "center", paddingTop: 22, ...fade(0) }}>
               <div style={{
                 fontSize: 11, fontWeight: 700, letterSpacing: "0.32em",
-                color: COLORS.textTertiary, marginBottom: 14,
+                color: COLORS.textTertiary, marginBottom: 16,
               }}>
                 OVIO
               </div>
-              <div style={{ fontSize: 34, fontWeight: 800, letterSpacing: -1.1, lineHeight: 1.12, color: COLORS.text }}>
+              <div style={{ fontSize: 42, fontWeight: 800, letterSpacing: -1.4, lineHeight: 1.08, color: COLORS.text }}>
                 Talk anywhere.
               </div>
-              <div style={{ fontSize: 13.5, color: COLORS.textSecondary, marginTop: 8, lineHeight: 1.6, maxWidth: 400, marginLeft: "auto", marginRight: "auto" }}>
-                Start a recording from anywhere. Ovio listens, transcribes, and
-                writes the notes — you never touch a window.
+              <div style={{ fontSize: 14.5, color: COLORS.textSecondary, marginTop: 12, lineHeight: 1.6, maxWidth: 420, marginLeft: "auto", marginRight: "auto" }}>
+                The fastest meeting recorder and automatic note-taker — private, on this Mac, and free.
               </div>
             </div>
 
@@ -581,16 +580,16 @@ export default function Onboarding({ onComplete, onSkip, recStatus }) {
               <div
                 style={{
                   ...fade(1),
-                  border: "1px solid rgba(77,141,255,0.55)",
+                  border: `1px solid ${COLORS.borderStrong}`,
                   borderRadius: 20,
-                  background: "linear-gradient(180deg, rgba(47,107,255,0.14) 0%, rgba(17,18,22,0.65) 100%)",
+                  background: COLORS.surface,
                   padding: "22px 20px 20px",
                   textAlign: "center",
                 }}
               >
                 <div style={{
                   fontSize: 10, fontWeight: 700, letterSpacing: "0.22em",
-                  color: COLORS.blueBright, marginBottom: 12,
+                  color: COLORS.textTertiary, marginBottom: 12,
                 }}>LISTENING</div>
                 <div style={{
                   display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
@@ -618,8 +617,8 @@ export default function Onboarding({ onComplete, onSkip, recStatus }) {
         {stepId === "mode" && (
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 12, ...fade(0) }}>
-              <div style={{ width: 38, height: 38, borderRadius: 11, background: `${COLORS.blue}14`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Mic size={18} color={COLORS.blue} />
+              <div style={{ width: 38, height: 38, borderRadius: 11, background: COLORS.surface2, border: `1px solid ${COLORS.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Mic size={18} color={COLORS.textSecondary} />
               </div>
               {sectionTitle("How should transcription run?", "You can change this anytime in Settings.")}
             </div>
@@ -631,13 +630,10 @@ export default function Onboarding({ onComplete, onSkip, recStatus }) {
                 <button key={m.id} onClick={() => setMode(m.id)} className="ovio-card"
                   style={{ ...cardStyle(mode === m.id), ...fade(i + 1) }}>
                   {mode === m.id && (
-                    <Check size={14} color={COLORS.blue} style={{ position: "absolute", top: 10, right: 10, animation: "ovioPop 350ms ease both" }} />
+                    <Check size={14} color={COLORS.textSecondary} style={{ position: "absolute", top: 10, right: 10 }} />
                   )}
                   <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>{m.title}</div>
-                    {m.id === "local" && (
-                      <span style={{ fontSize: 8.5, fontWeight: 700, color: COLORS.green, background: `${COLORS.green}14`, borderRadius: 4, padding: "1px 5px" }}>RECOMMENDED</span>
-                    )}
                   </div>
                   <div style={{ fontSize: 11, color: COLORS.textSecondary, lineHeight: 1.5, marginTop: 4 }}>{m.desc}</div>
                 </button>
@@ -657,20 +653,14 @@ export default function Onboarding({ onComplete, onSkip, recStatus }) {
                         style={{ ...cardStyle(localModel === m.id), ...fade(i + 5) }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                           <div style={{ fontSize: 12.5, fontWeight: 600, color: COLORS.text }}>{m.title}</div>
-                          {m.recommended && (
-                            <span style={{
-                              fontSize: 9, fontWeight: 700, color: COLORS.blue,
-                              background: `${COLORS.blue}14`, borderRadius: 4, padding: "1px 5px",
-                            }}>BEST</span>
-                          )}
                         </div>
                         <div style={{ fontSize: 10.5, color: COLORS.textTertiary, margin: "3px 0" }}>{m.desc} · {m.size}</div>
                         <div style={{
                           fontSize: 10.5, fontWeight: 600,
-                          color: st?.downloading ? COLORS.blue : st?.downloaded ? COLORS.green : COLORS.textTertiary,
+                          color: st?.downloading ? COLORS.blue : st?.downloaded ? COLORS.textSecondary : COLORS.textTertiary,
                         }}>
                           {st?.downloading ? `Downloading… ${Math.round((st.progress || 0) * 100)}%`
-                            : st?.downloaded ? "✓ Ready" : "Will download now"}
+                            : st?.downloaded ? "Ready" : "Will download now"}
                         </div>
                       </button>
                     );
@@ -680,7 +670,7 @@ export default function Onboarding({ onComplete, onSkip, recStatus }) {
                   <div style={{
                     ...fade(7),
                     display: "flex", alignItems: "center", gap: 8, fontSize: 11.5,
-                    color: COLORS.blue, background: `${COLORS.blue}0d`,
+                    color: COLORS.textSecondary,
                     borderRadius: 8, padding: "8px 12px",
                   }}>
                     <Download size={13} />
@@ -702,7 +692,7 @@ export default function Onboarding({ onComplete, onSkip, recStatus }) {
               <button onClick={() => setAiProvider("cloud")} className="ovio-card"
                 style={{ ...cardStyle(aiProvider === "cloud"), ...fade(1) }}>
                 {aiProvider === "cloud" && (
-                  <Check size={14} color={COLORS.purple} style={{ position: "absolute", top: 10, right: 10, animation: "ovioPop 350ms ease both" }} />
+                  <Check size={14} color={COLORS.textSecondary} style={{ position: "absolute", top: 10, right: 10 }} />
                 )}
                 <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>Cloud AI</div>
                 <div style={{ fontSize: 11, color: COLORS.textSecondary, lineHeight: 1.5, marginTop: 3 }}>Gemini + OpenRouter. Fast, generous free tier.</div>
@@ -710,7 +700,7 @@ export default function Onboarding({ onComplete, onSkip, recStatus }) {
               <button onClick={() => setAiProvider("localOnly")} className="ovio-card"
                 style={{ ...cardStyle(aiProvider === "localOnly"), ...fade(2) }}>
                 {aiProvider === "localOnly" && (
-                  <Check size={14} color={COLORS.green} style={{ position: "absolute", top: 10, right: 10, animation: "ovioPop 350ms ease both" }} />
+                  <Check size={14} color={COLORS.textSecondary} style={{ position: "absolute", top: 10, right: 10 }} />
                 )}
                 <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>Local (Ollama)</div>
                 <div style={{ fontSize: 11, color: COLORS.textSecondary, lineHeight: 1.5, marginTop: 3 }}>A model on this Mac. No keys, fully private.</div>
@@ -724,7 +714,7 @@ export default function Onboarding({ onComplete, onSkip, recStatus }) {
                     placeholder="Gemini key — AIza…  (aistudio.google.com/apikey)" style={inputStyle} />
                   <button onClick={handleVerifyGroq} disabled={verifying || !groqKey.trim()}
                     style={{
-                      border: "none", background: verifying ? COLORS.border : COLORS.blue, color: "#fff",
+                      border: `1px solid ${COLORS.borderStrong}`, background: verifying ? COLORS.surface2 : "transparent", color: verifying ? COLORS.textTertiary : COLORS.text,
                       fontSize: 12, fontWeight: 600, borderRadius: 8, padding: "0 14px",
                       cursor: verifying ? "default" : "pointer", fontFamily: FONT,
                     }}>
@@ -742,7 +732,7 @@ export default function Onboarding({ onComplete, onSkip, recStatus }) {
                     placeholder="OpenRouter key (optional backup) — sk-or-v1-..." style={inputStyle} />
                   <button onClick={handleVerifyOr} disabled={verifying || !openrouterKey.trim()}
                     style={{
-                      border: "none", background: verifying ? COLORS.border : COLORS.purple, color: "#fff",
+                      border: `1px solid ${COLORS.borderStrong}`, background: verifying ? COLORS.surface2 : "transparent", color: verifying ? COLORS.textTertiary : COLORS.text,
                       fontSize: 12, fontWeight: 600, borderRadius: 8, padding: "0 14px",
                       cursor: verifying ? "default" : "pointer", fontFamily: FONT,
                     }}>
@@ -766,7 +756,7 @@ export default function Onboarding({ onComplete, onSkip, recStatus }) {
                     placeholder="http://localhost:11434" style={inputStyle} />
                   <button onClick={handleCheckOllama} disabled={checkingOllama}
                     style={{
-                      border: "none", background: checkingOllama ? COLORS.border : COLORS.green, color: "#fff",
+                      border: `1px solid ${COLORS.borderStrong}`, background: checkingOllama ? COLORS.surface2 : "transparent", color: checkingOllama ? COLORS.textTertiary : COLORS.text,
                       fontSize: 12, fontWeight: 600, borderRadius: 8, padding: "0 14px",
                       cursor: checkingOllama ? "default" : "pointer", fontFamily: FONT,
                     }}>
@@ -835,8 +825,8 @@ export default function Onboarding({ onComplete, onSkip, recStatus }) {
                         style={{
                           ...fade(i + 5),
                           display: "flex", alignItems: "center", gap: 12,
-                          border: `2px solid ${selected ? COLORS.green : COLORS.border}`,
-                          background: selected ? `${COLORS.green}0d` : COLORS.surface,
+                          border: `2px solid ${selected ? COLORS.borderStrong : COLORS.border}`,
+                          background: selected ? "rgba(255,255,255,0.045)" : COLORS.surface,
                           borderRadius: 12, padding: "12px 14px",
                           cursor: isInstalled ? "pointer" : "default",
                           flex: "none",
@@ -844,27 +834,25 @@ export default function Onboarding({ onComplete, onSkip, recStatus }) {
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                             <span style={{ fontSize: 12.5, fontWeight: 700, color: COLORS.text }}>{m.title}</span>
-                            {m.recommended && (
-                              <span style={{ fontSize: 9, fontWeight: 700, color: COLORS.green, background: `${COLORS.green}14`, borderRadius: 4, padding: "1px 5px" }}>BEST</span>
-                            )}
                           </div>
                           <div style={{ fontSize: 10.5, color: COLORS.textTertiary, marginTop: 2 }}>{m.desc} · {m.size}</div>
                         </div>
                         {pull?.error ? (
                           <span style={{ fontSize: 10, color: COLORS.red, maxWidth: 130, textAlign: "right", lineHeight: 1.4 }}>{pull.error}</span>
                         ) : isInstalled ? (
-                          <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, color: COLORS.green }}>
+                          <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600, color: selected ? COLORS.text : COLORS.textTertiary }}>
                             {selected ? (<>Selected <Check size={13} /></>) : "Ready"}
                           </span>
                         ) : (
                           <button onClick={(e) => { e.stopPropagation(); pullOllama(m.id); }}
                             disabled={!ollamaStatus?.ok || checkingOllama}
                             style={{
-                              display: "flex", alignItems: "center", gap: 4, border: "none",
-                              background: ollamaStatus?.ok ? COLORS.green : COLORS.border, color: "#fff",
+                              display: "flex", alignItems: "center", gap: 4,
+                              border: `1px solid ${COLORS.borderStrong}`,
+                              background: "transparent", color: COLORS.text,
                               fontSize: 11, fontWeight: 700, borderRadius: 7, padding: "6px 12px",
                               cursor: ollamaStatus?.ok ? "pointer" : "default", fontFamily: FONT,
-                              flexShrink: 0,
+                              flexShrink: 0, opacity: ollamaStatus?.ok ? 1 : 0.4,
                             }}>
                             <Download size={12} /> Pull
                           </button>
@@ -1066,32 +1054,28 @@ export default function Onboarding({ onComplete, onSkip, recStatus }) {
           <div style={{ display: "flex", gap: 8 }}>
             {step > 0 && (
               <button onClick={() => setStep((s) => s - 1)} style={{
-                display: "flex", alignItems: "center", gap: 4, border: `1px solid ${COLORS.borderStrong}`,
-                background: COLORS.surface, color: COLORS.text, fontSize: 12.5, fontWeight: 600,
+                display: "flex", alignItems: "center", gap: 4, border: `1px solid ${COLORS.border}`,
+                background: "transparent", color: COLORS.textSecondary, fontSize: 12.5, fontWeight: 600,
                 borderRadius: 999, padding: "9px 16px", cursor: "pointer", fontFamily: FONT,
-                transition: "transform 220ms cubic-bezier(.34,1.56,.64,1), border-color 180ms ease",
+                transition: "border-color 180ms ease, color 180ms ease",
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-1.5px) scale(1.03)")}
-              onMouseLeave={(e) => (e.currentTarget.style.transform = "translateY(0) scale(1)")}>
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = COLORS.borderStrong; e.currentTarget.style.color = COLORS.text; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = COLORS.border; e.currentTarget.style.color = COLORS.textSecondary; }}>
                 <ArrowLeft size={13} /> Back
               </button>
             )}
             {step < stepDefs.length - 1 ? (
               <button onClick={() => setStep((s) => s + 1)} style={{
                 ...PILL.primary, fontSize: 12.5, padding: "9px 18px", fontFamily: FONT,
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-1.5px) scale(1.04)")}
-              onMouseLeave={(e) => (e.currentTarget.style.transform = "translateY(0) scale(1)")}>
+                transition: "opacity 160ms ease",
+              }}>
                 {stepId === "download" && !activeModel?.downloaded ? "Continue in background" : "Next"}
                 <ArrowRight size={13} />
               </button>
             ) : (
               <button onClick={handleComplete} style={{
                 ...PILL.primary, fontSize: 12.5, padding: "9px 18px", fontFamily: FONT,
-                
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-1.5px) scale(1.05)")}
-              onMouseLeave={(e) => (e.currentTarget.style.transform = "translateY(0) scale(1)")}>
+              }}>
                 Get Started <ArrowRight size={13} />
               </button>
             )}
