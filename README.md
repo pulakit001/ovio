@@ -19,6 +19,9 @@ Prefer the DMG? Grab `Ovio-mac-arm64.dmg` from [Releases](https://github.com/pul
 Download `Ovio-Setup.exe` from [Releases](https://github.com/pulakit001/ovio/releases/latest), run it,
 then click **More info → Run anyway** on the SmartScreen prompt.
 
+To skip the prompt entirely: right-click the file → **Properties** → tick **Unblock** → **Apply**.
+(The installer isn't code-signed yet, so Windows warns about it once.)
+
 ## Linux
 
 Download from [Releases](https://github.com/pulakit001/ovio/releases/latest), then:

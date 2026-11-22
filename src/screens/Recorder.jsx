@@ -41,7 +41,7 @@ import { COLORS, CTA } from "../ui/theme"; // live theme object — follows dark
 import TransferModal from "../components/TransferModal";
 
 const FONT =
-  '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif';
+  '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "InterVar", "Segoe UI Variable Text", "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif';
 
 const PLATFORM = window.electronAPI?.platform ?? "web";
 const IS_MAC = PLATFORM === "darwin";

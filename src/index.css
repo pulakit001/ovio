@@ -16,11 +16,21 @@ body,
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Bundled so Windows and Linux get the same typeface as the design instead of
+   whatever sans-serif the machine happens to have. Weight axis 100–900. */
+@font-face {
+  font-family: "InterVar";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("./assets/fonts/inter-latin-wght-normal.woff2") format("woff2-variations");
+}
+
 body {
-  /* macOS resolves the SF names; Windows falls through to Segoe UI, which is
-     the platform's own UI face; Linux lands on its system sans. */
+  /* macOS resolves the SF names first; everywhere else the bundled Inter is
+     used, so metrics and letterfit match no matter the OS. */
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
-    "Segoe UI Variable Text", "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    "InterVar", "Segoe UI Variable Text", "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
 /* macOS' antialiased smoothing makes Segoe UI look thin and blurry at 100%
