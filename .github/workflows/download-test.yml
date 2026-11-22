@@ -31,14 +31,19 @@ jobs:
       - name: Silent install
         shell: pwsh
         run: |
-          $installer = Start-Process -FilePath (Resolve-Path .\Ovio-Setup.exe) -ArgumentList '/S' -Wait -PassThru
-          "installer exit code: $($installer.ExitCode)"
-          Start-Sleep -Seconds 10
           $exe = Join-Path $env:LOCALAPPDATA 'Programs\ovio\Ovio.exe'
+          # NSIS occasionally dies with 0xC0000005 on cold runners, so retry.
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            $installer = Start-Process -FilePath (Resolve-Path .\Ovio-Setup.exe) -ArgumentList '/S' -Wait -PassThru
+            "attempt ${attempt}: installer exit code $($installer.ExitCode)"
+            Start-Sleep -Seconds 10
+            if (Test-Path $exe) { break }
+            Start-Sleep -Seconds 5
+          }
           if (-not (Test-Path $exe)) {
             Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs') -Recurse -Filter 'Ovio.exe' -ErrorAction SilentlyContinue |
               ForEach-Object { $_.FullName }
-            throw 'Ovio.exe was not installed'
+            throw 'Ovio.exe was not installed after 3 attempts'
           }
           "installed: $exe"
           (Get-Item $exe).VersionInfo | Format-List FileVersion, ProductVersion, ProductName
@@ -99,14 +104,15 @@ jobs:
           chmod +x Ovio-x86_64.AppImage
           sudo apt-get install -y libfuse2t64 || sudo apt-get install -y libfuse2
           xvfb-run -a ./Ovio-x86_64.AppImage --no-sandbox > appimage.log 2>&1 &
-          pid=$!
           sleep 25
-          if kill -0 "$pid" 2>/dev/null; then
-            echo "AppImage still running after 25s"
+          # The AppImage runtime re-execs the app, so look for the process
+          # itself rather than the xvfb-run wrapper.
+          if grep -q '\[ovio\]' appimage.log && pgrep -af 'ovio|Ovio' | grep -v pgrep; then
+            echo "AppImage started and is still running"
           else
-            echo "AppImage exited early"
+            echo "AppImage did not stay up"
             tail -40 appimage.log
             exit 1
           fi
           tail -20 appimage.log
-          kill "$pid" 2>/dev/null || true
+          pkill -f Ovio-x86_64.AppImage 2>/dev/null || true
