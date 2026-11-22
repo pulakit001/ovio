@@ -1,0 +1,113 @@
+name: Release download test
+
+# Downloads the published installers from GitHub Releases (not a local build) and
+# checks they install and start on real Windows and Linux machines.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to download, e.g. v1.3.3
+        required: true
+        default: v1.3.3
+
+permissions:
+  contents: read
+
+jobs:
+  windows-download:
+    name: Windows download + install
+    runs-on: windows-latest
+    steps:
+      - name: Download installer from releases
+        shell: pwsh
+        run: |
+          $url = "https://github.com/${{ github.repository }}/releases/download/${{ inputs.tag }}/Ovio-Setup.exe"
+          Invoke-WebRequest -Uri $url -OutFile Ovio-Setup.exe
+          $file = Get-Item Ovio-Setup.exe
+          "downloaded: $($file.Name) ($($file.Length) bytes)"
+          "sha256: $((Get-FileHash Ovio-Setup.exe -Algorithm SHA256).Hash.ToLower())"
+
+      - name: Silent install
+        shell: pwsh
+        run: |
+          $installer = Start-Process -FilePath (Resolve-Path .\Ovio-Setup.exe) -ArgumentList '/S' -Wait -PassThru
+          "installer exit code: $($installer.ExitCode)"
+          Start-Sleep -Seconds 10
+          $exe = Join-Path $env:LOCALAPPDATA 'Programs\ovio\Ovio.exe'
+          if (-not (Test-Path $exe)) {
+            Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs') -Recurse -Filter 'Ovio.exe' -ErrorAction SilentlyContinue |
+              ForEach-Object { $_.FullName }
+            throw 'Ovio.exe was not installed'
+          }
+          "installed: $exe"
+          (Get-Item $exe).VersionInfo | Format-List FileVersion, ProductVersion, ProductName
+
+      - name: Launch installed app
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:LOCALAPPDATA 'Programs\ovio\Ovio.exe'
+          $proc = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 25
+          if ($proc.HasExited) { throw "Ovio exited during startup (code $($proc.ExitCode))" }
+          "app still running after 25s (pid $($proc.Id))"
+          Get-Process -Id $proc.Id | Select-Object ProcessName, Responding | Format-List
+          Stop-Process -Id $proc.Id -Force
+
+  linux-download:
+    name: Linux download + install
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download .deb and AppImage from releases
+        run: |
+          base="https://github.com/${{ github.repository }}/releases/download/${{ inputs.tag }}"
+          curl -fsSLO "$base/Ovio-amd64.deb"
+          curl -fsSLO "$base/Ovio-x86_64.AppImage"
+          ls -l Ovio-amd64.deb Ovio-x86_64.AppImage
+          sha256sum Ovio-amd64.deb Ovio-x86_64.AppImage
+
+      - name: Install .deb
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ./Ovio-amd64.deb
+          pkg="$(dpkg-deb -f Ovio-amd64.deb Package)"
+          echo "package name: $pkg"
+          dpkg -l "$pkg"
+          dpkg -L "$pkg" | grep -E '/(ovio|Ovio)$' || dpkg -L "$pkg" | head -20
+
+      - name: Launch installed app under Xvfb
+        run: |
+          sudo apt-get install -y xvfb
+          exe="$(command -v ovio || true)"
+          [ -n "$exe" ] || exe=/opt/Ovio/ovio
+          echo "launching $exe"
+          xvfb-run -a "$exe" --no-sandbox > app.log 2>&1 &
+          pid=$!
+          sleep 25
+          if kill -0 "$pid" 2>/dev/null; then
+            echo "app still running after 25s"
+          else
+            echo "app exited early"
+            tail -40 app.log
+            exit 1
+          fi
+          tail -20 app.log
+          kill "$pid" 2>/dev/null || true
+
+      - name: AppImage extract + launch
+        run: |
+          chmod +x Ovio-x86_64.AppImage
+          ./Ovio-x86_64.AppImage --appimage-extract > /dev/null
+          ls squashfs-root | head
+          xvfb-run -a ./squashfs-root/AppRun --no-sandbox > appimage.log 2>&1 &
+          pid=$!
+          sleep 25
+          if kill -0 "$pid" 2>/dev/null; then
+            echo "AppImage still running after 25s"
+          else
+            echo "AppImage exited early"
+            tail -40 appimage.log
+            exit 1
+          fi
+          tail -20 appimage.log
+          kill "$pid" 2>/dev/null || true
