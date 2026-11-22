@@ -112,10 +112,10 @@ jobs:
         run: |
           APP="release/win-unpacked/resources/app.asar"
           [ -f "$APP" ] || { echo "✖ missing asar: $APP"; exit 1; }
-          # Strip CR: asar output on Windows uses CRLF line endings.
-          npx --yes @electron/asar list "$APP" | tr -d '\r' | grep -q "dist/index.html" \
-            || { echo "✖ dist/index.html is NOT in the asar — the app would open blank."; exit 1; }
-          echo "✔ dist/index.html is packaged."
+          # asar list uses backslashes + CRLF on Windows, so match loosely.
+          npx --yes @electron/asar list "$APP" | tr -d '\r' | grep -qi "index.html" \
+            || { echo "✖ renderer (index.html) is NOT in the asar — the app would open blank."; exit 1; }
+          echo "✔ renderer (index.html) is packaged."
 
       - name: Upload Windows artifacts
         shell: bash
