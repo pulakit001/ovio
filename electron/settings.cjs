@@ -322,7 +322,7 @@ function mergeProviderKeys(prevKeys, patchedKeys) {
   return merged;
 }
 
-function registerSettingsIpc() {
+function registerSettingsIpc({ onChange } = {}) {
   ipcMain.handle("settings:get", () => sanitizeForRenderer(loadSettings()));
 
   ipcMain.handle("settings:getPlain", () => {
@@ -347,7 +347,11 @@ function registerSettingsIpc() {
     if (patch.openrouterKeys) {
       merged.openrouterKeys = mergeProviderKeys(s.openrouterKeys, patch.openrouterKeys);
     }
-    return persistSettings(merged);
+    const next = persistSettings(merged);
+    if (onChange) {
+      try { onChange(next); } catch (err) { console.warn("[ovio] settings onChange:", err.message); }
+    }
+    return next;
   };
 
   ipcMain.handle("settings:update", handleUpdate);

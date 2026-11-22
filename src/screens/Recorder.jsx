@@ -41,7 +41,11 @@ import { COLORS, CTA } from "../ui/theme"; // live theme object — follows dark
 import TransferModal from "../components/TransferModal";
 
 const FONT =
-  '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif';
+  '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif';
+
+const PLATFORM = window.electronAPI?.platform ?? "web";
+const IS_MAC = PLATFORM === "darwin";
+const IS_WIN = PLATFORM === "win32";
 
 // Example questions shown when the chat is empty. The recording scope stays
 // close to the open transcript; the library scope mirrors the Dashboard's
@@ -2077,7 +2081,10 @@ export default function MacNoteTaker({
       {/* Top bar */}
       <div style={{
         height: 52, minHeight: 52, display: "flex", alignItems: "center",
-        padding: "0 16px", paddingLeft: 80,
+        padding: "0 16px",
+        // macOS: clear the traffic lights. Windows: clear the caption buttons.
+        paddingLeft: IS_MAC ? 80 : 18,
+        paddingRight: IS_WIN ? 148 : 16,
         borderBottom: `1px solid ${COLORS.border}`, background: COLORS.surface,
         gap: 10,
         animation: "ovioFadeDown 340ms cubic-bezier(.22,1,.36,1) both",

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, session, globalShortcut, screen, dialog, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, session, globalShortcut, screen, dialog, shell, Menu } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const {
@@ -18,6 +18,30 @@ let panelWindow;
 // the desktop behind it.
 const PANEL_W = 320;
 const PANEL_H = 46;
+
+const IS_WIN = process.platform === "win32";
+// Header height in App.jsx — the Windows caption buttons are centred in it.
+const HEADER_H = 72;
+
+// Colours for the Windows title-bar overlay, kept in step with the renderer
+// palette so the caption buttons sit flush on Ovio's own header.
+function windowChrome() {
+  const dark = loadSettings().theme === "dark";
+  return {
+    background: dark ? "#050507" : "#FAFAF8",
+    symbol: dark ? "#EDEDED" : "#141414",
+  };
+}
+
+function applyWindowsTitleBar() {
+  if (!IS_WIN || !mainWindow || mainWindow.isDestroyed()) return;
+  const chrome = windowChrome();
+  try {
+    mainWindow.setTitleBarOverlay({ color: chrome.background, symbolColor: chrome.symbol, height: HEADER_H });
+  } catch (err) {
+    console.warn("[ovio] Could not update title bar overlay:", err.message);
+  }
+}
 // Tracks intent: springPanelIn completes asynchronously (ready-to-show), so
 // timers must know whether a show is still wanted — and must ignore a spring
 // that a newer press already replaced.
@@ -246,17 +270,29 @@ function destroyPanel() {
 
 function createWindow() {
   rendererReady = false; // the fresh page must announce itself before commands flow
+  const chrome = windowChrome();
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 900,
     minHeight: 600,
-    // macOS gets the inset traffic lights; Windows/Linux keep their native
-    // frame (the app has no custom min/close buttons to fall back on).
+    // macOS gets the inset traffic lights; Windows hides the native title bar
+    // and overlays its caption buttons on the app header (macOS-style chrome
+    // with working snap layouts); Linux keeps its native frame.
     ...(process.platform === "darwin"
       ? { titleBarStyle: "hiddenInset", trafficLightPosition: { x: 16, y: 16 } }
       : {}),
-    backgroundColor: loadSettings().theme === "dark" ? "#050507" : "#FAFAF8",
+    ...(IS_WIN
+      ? {
+          titleBarStyle: "hidden",
+          titleBarOverlay: {
+            color: chrome.background,
+            symbolColor: chrome.symbol,
+            height: HEADER_H,
+          },
+        }
+      : {}),
+    backgroundColor: chrome.background,
     show: false,
     icon: LOGO_PATH,
     webPreferences: {
@@ -321,8 +357,13 @@ app.whenReady().then(() => {
     onUpdateAvailable: (info) => broadcastToMain("updater:update", info),
     onRemoteMessage: (msg) => broadcastToMain("updater:message", msg),
   });
-  registerSettingsIpc();
+  registerSettingsIpc({ onChange: applyWindowsTitleBar });
   registerStoreIpc(); // durable disk-backed library (replaces localStorage)
+
+  // The default Electron menu (File/Edit/View/Window/Help) has no place in a
+  // single-purpose app: it added a whole extra toolbar row on Windows and
+  // Linux. macOS keeps its app menu for standard shortcuts.
+  if (process.platform !== "darwin") Menu.setApplicationMenu(null);
 
   if (process.platform === "darwin" && app.dock) {
     try {

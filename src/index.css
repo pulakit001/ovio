@@ -17,8 +17,20 @@ body,
 }
 
 body {
+  /* macOS resolves the SF names; Windows falls through to Segoe UI, which is
+     the platform's own UI face; Linux lands on its system sans. */
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
-    "Helvetica Neue", Helvetica, Arial, sans-serif;
+    "Segoe UI Variable Text", "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+/* macOS' antialiased smoothing makes Segoe UI look thin and blurry at 100%
+   scaling, so non-Mac keeps the platform's native text rendering. */
+:root[data-platform="win32"] body,
+:root[data-platform="win32"] #root,
+:root[data-platform="linux"] body,
+:root[data-platform="linux"] #root {
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: auto;
 }
 
 ::-webkit-scrollbar {

@@ -14,7 +14,7 @@
 // old blue vocabulary disappears app-wide without touching call sites.
 
 export const FONT =
-  '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif';
+  '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif';
 
 // ---- The one accent. Lime, used only for intelligence + progress. ----
 const LIME = {

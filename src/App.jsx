@@ -397,7 +397,8 @@ button:focus-visible { outline: 2px solid rgba(198,245,95,0.42); outline-offset:
           alignItems: "center",
           justifyContent: "space-between",
           paddingLeft: window.electronAPI?.platform === "darwin" ? 78 : 18,
-          paddingRight: 18,
+          // Windows draws its caption buttons over the top-right of the header.
+          paddingRight: window.electronAPI?.platform === "win32" ? 148 : 18,
           WebkitAppRegion: "drag",
         }}
       >
