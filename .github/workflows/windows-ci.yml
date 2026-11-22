@@ -1,0 +1,108 @@
+name: Windows CI
+
+# Validates the app on a real Windows machine (windows-latest):
+#
+#  build-and-package  — npm ci, vite build, electron-builder NSIS installer,
+#                       then asserts the renderer and the native whisper binary
+#                       actually made it into the packaged app. Uploads the
+#                       installer + renderer as artifacts.
+#  sidecar-protocol   — runs the Parakeet streaming-protocol test against the
+#                       stub sidecar in a real Windows Python, proving the
+#                       asyncio/WebSocket sidecar works off macOS.
+#
+# Neither job is an interactive desktop: this catches build/packaging/runtime
+# regressions, not UI behaviour.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-package:
+    name: Build + package installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build renderer (vite)
+        run: npm run build
+
+      - name: Verify renderer output
+        shell: bash
+        run: |
+          test -s dist/index.html || { echo "::error::dist/index.html missing — the app would open blank."; exit 1; }
+          # Single-file build contract: everything inlined, no external scripts.
+          if grep -q '<script[^>]*src=' dist/index.html; then
+            echo "::error::external <script src> found — the single-file build is broken."
+            exit 1
+          fi
+          grep -q 'id="root"' dist/index.html || { echo "::error::#root mount point missing."; exit 1; }
+          echo "✔ renderer ok: $(wc -c < dist/index.html) bytes, single file, #root present."
+
+      - name: Package Windows installer (NSIS)
+        run: npx electron-builder --win nsis --publish never
+
+      - name: Verify packaged app
+        shell: bash
+        run: |
+          ls release/*.exe || { echo "::error::no installer produced in release/"; exit 1; }
+          APP="release/win-unpacked/resources/app.asar"
+          test -f "$APP" || { echo "::error::missing $APP"; exit 1; }
+          # asar list uses backslashes + CRLF on Windows, so match loosely.
+          npx --yes @electron/asar list "$APP" | tr -d '\r' | grep -qi "index.html" \
+            || { echo "::error::renderer (index.html) is NOT in the asar."; exit 1; }
+          echo "✔ renderer (index.html) is packaged."
+          # The win32-x64 native whisper binding is an optional dependency; it
+          # must be unpacked or on-device transcription silently fails at runtime.
+          find release/win-unpacked -name "whisper.node" | tr -d '\r' | grep -q "win32-x64" \
+            || { echo "::error::win32-x64 whisper.node is missing from the packaged app."; exit 1; }
+          echo "✔ win32-x64 whisper.node is unpacked."
+          test -f release/win-unpacked/resources/parakeet_server.py \
+            || { echo "::error::extraResources parakeet_server.py missing."; exit 1; }
+          echo "✔ parakeet_server.py extraResource present."
+          ls -la release/*.exe
+
+      - name: Upload Windows build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ovio-windows-build
+          path: |
+            release/*.exe
+            dist/
+          if-no-files-found: warn
+          retention-days: 14
+
+  sidecar-protocol:
+    name: Parakeet sidecar protocol test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node >= 22 for the built-in WebSocket the test script uses.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install sidecar runtime deps (stub mode needs no NeMo)
+        run: python -m pip install --quiet fastapi "uvicorn[standard]" numpy
+
+      - name: Stream synthetic audio through the stub sidecar
+        run: npm run test:parakeet -- --python python

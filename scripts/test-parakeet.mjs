@@ -14,6 +14,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const args = process.argv.slice(2);
 const arg = (name, fallback = null) => {
@@ -24,7 +25,9 @@ const arg = (name, fallback = null) => {
 const PORT = arg("port", null);
 const WAV = arg("wav", null);
 const CHUNK_MS = parseInt(arg("chunk-ms", "400"), 10);
-const SERVER_DIR = path.resolve(new URL("..", import.meta.url).pathname, "electron");
+// fileURLToPath, not URL.pathname: on Windows pathname is "/C:/...", which
+// path.resolve turns into an invalid "\\C:\\..." path.
+const SERVER_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "electron");
 
 let child = null;
 
