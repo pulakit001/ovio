@@ -30,10 +30,14 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #c7c7cc;
+  background: var(--ovio-scroll-thumb, rgba(10, 10, 10, 0.16));
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #a1a1a6;
+  background: var(--ovio-scroll-thumb-hover, rgba(10, 10, 10, 0.28));
+}
+
+::selection {
+  background: var(--ovio-selection, rgba(143, 194, 43, 0.26));
 }

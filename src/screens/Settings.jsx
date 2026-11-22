@@ -2,11 +2,12 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import {
   X, Plus, Trash2, Check,
-  Download, Upload, Server, ScrollText, Wand2, Sun, Moon, Info,
+  Download, Upload, Server, ScrollText, Wand2, Sun, Moon,
 } from "lucide-react";
 import { verifyGroqKey, verifyOpenRouterKey } from "../services/verifyKeys";
 import { checkOllama, OLLAMA_TOP_MODELS } from "../services/ollama";
-import { FONT, COLORS } from "../ui/theme";
+import { FONT, COLORS, RADIUS, TYPE } from "../ui/theme";
+import { PageHeader } from "../ui/kit";
 import { useSettings } from "../context/SettingsContext";
 
 function genId() {
@@ -32,7 +33,7 @@ function Toggle({ checked, onChange }) {
     <button onClick={() => onChange(!checked)} title={checked ? "Disable" : "Enable"}
       style={{
         width: 40, height: 22, borderRadius: 11, border: "none", position: "relative",
-        background: checked ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.14)", cursor: "pointer", flexShrink: 0,
+        background: checked ? COLORS.text : COLORS.borderStrong, cursor: "pointer", flexShrink: 0,
         boxShadow: "none",
         transition: "background 200ms ease, box-shadow 200ms ease",
       }}>
@@ -69,15 +70,15 @@ const SETTINGS_CSS = `
 // separated by hairlines. No card-per-control, no borders around borders.
 function Group({ label, children }) {
   return (
-    <div style={{ marginBottom: 24 }}>
+    <div style={{ marginBottom: 30 }}>
       {label && (
         <div style={{
-          fontSize: 11, fontWeight: 700, letterSpacing: "0.08em",
-          textTransform: "uppercase", color: COLORS.textTertiary, margin: "0 0 7px 2px",
+          fontSize: TYPE.eyebrow, fontWeight: 600, letterSpacing: "0.14em",
+          textTransform: "uppercase", color: COLORS.textTertiary, margin: "0 0 12px 2px",
         }}>{label}</div>
       )}
       <div style={{
-        border: `1px solid ${COLORS.border}`, borderRadius: 12,
+        border: `1px solid ${COLORS.border}`, borderRadius: RADIUS.panel,
         background: COLORS.surface, overflow: "hidden",
       }}>
         {children}
@@ -94,7 +95,7 @@ function Row({ title, sub, children, onClick, last, stack }) {
       onClick={onClick}
       style={{
         display: "flex", alignItems: stack ? "flex-start" : "center", gap: 12,
-        padding: "10px 14px", cursor: onClick ? "pointer" : "default",
+        padding: "14px 18px", cursor: onClick ? "pointer" : "default",
         borderBottom: last ? "none" : `1px solid ${COLORS.border}`,
         transition: "background 140ms ease",
         background: "transparent",
@@ -103,8 +104,8 @@ function Row({ title, sub, children, onClick, last, stack }) {
       onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
     >
       <div style={{ flex: stack ? 1 : "0 0 auto", minWidth: 0, width: stack ? "100%" : undefined }}>
-        <div style={{ fontSize: 13, fontWeight: 500, color: COLORS.text }}>{title}</div>
-        {sub && <div style={{ fontSize: 11, color: COLORS.textTertiary, marginTop: 2, lineHeight: 1.55 }}>{sub}</div>}
+        <div style={{ fontSize: 14, fontWeight: 500, color: COLORS.text }}>{title}</div>
+        {sub && <div style={{ fontSize: 12, color: COLORS.textTertiary, marginTop: 3, lineHeight: 1.55 }}>{sub}</div>}
         {stack && children}
       </div>
       {!stack && children}
@@ -196,7 +197,7 @@ function KeyRow({ entry, provider, onUpdate, onRemove, onToggle, last }) {
       <button onClick={() => onToggle(entry.id)} title="Toggle active"
         style={{
           width: 30, height: 18, borderRadius: 9, border: "none",
-          background: entry.active ? "rgba(255,255,255,0.85)" : COLORS.borderStrong,
+          background: entry.active ? COLORS.text : COLORS.borderStrong,
           cursor: "pointer", position: "relative", flexShrink: 0, transition: "background 150ms ease",
         }}>
         <div style={{
@@ -254,7 +255,7 @@ const NOTE_SECTIONS = [
   { id: "followUps", label: "Follow-ups", desc: "Actions, owners, open threads" },
 ];
 
-export default function Settings({ onNavigate, mode, setMode, sttModel, setSttModel, localSttModel, setLocalSttModel, aiProvider, setAiProvider, ollamaUrl, setOllamaUrl, ollamaModel, setOllamaModel, setFullyLocal, onExport, onImport, onClearAll, onKeysChanged, ambientShortcutLabel }) {
+export default function Settings({ onNavigate, mode, setMode, sttModel, setSttModel, localSttModel, setLocalSttModel, aiProvider, setAiProvider, ollamaUrl, setOllamaUrl, ollamaModel, setOllamaModel, setFullyLocal, onExport, onImport, onClearAll, onKeysChanged, ambientShortcutLabel, onReplayTour }) {
   const { settings: ctxSettings, update: updateSettings } = useSettings();
   const [groqKeys, setGroqKeys] = useState([]);
   const [openrouterKeys, setOpenrouterKeys] = useState([]);
@@ -288,11 +289,6 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
   const [behaviorSaved, setBehaviorSaved] = useState(false);
   // Legal (Terms & Conditions) modal.
   const [legalOpen, setLegalOpen] = useState(false);
-  const [aboutOpen, setAboutOpen] = useState(false);
-  const [appInfo, setAppInfo] = useState(null);
-  useEffect(() => {
-    window.electronAPI?.appInfo?.().then(setAppInfo).catch(() => {});
-  }, []);
 
   // ---- Ambient shortcut: load config + live registration info ----
   useEffect(() => {
@@ -387,8 +383,8 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
 
   // Theme mode: persisted instantly; App's applyTheme effect re-skins the
   // whole app on the next render (live COLORS object).
-  const [themeMode, setThemeMode] = useState(ctxSettings?.theme || "dark");
-  useEffect(() => { setThemeMode(ctxSettings?.theme || "dark"); }, [ctxSettings?.theme]);
+  const [themeMode, setThemeMode] = useState(ctxSettings?.theme || "light");
+  useEffect(() => { setThemeMode(ctxSettings?.theme || "light"); }, [ctxSettings?.theme]);
   const saveTheme = async (mode) => {
     setThemeMode(mode);
     try {
@@ -632,22 +628,18 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
   // Agent skill sections removed — the AI now outputs one in-depth summary.
 
   return (
-    <div style={{
+    <div data-tour="settings" style={{
       flex: 1, overflowY: "auto", background: COLORS.windowBg, fontFamily: FONT,
     }}>
       <style>{SETTINGS_CSS}</style>
 
       {/* Single centered column of grouped rows */}
       <div style={{
-        width: 620, maxWidth: "92%", margin: "0 auto",
-        padding: "40px 0 72px",
+        width: 680, maxWidth: "92%", margin: "0 auto",
+        padding: "40px 0 88px",
         animation: "ovioSettingsIn 520ms cubic-bezier(.16,1,.3,1) both",
       }} key="settings-page">
-        <div style={{ marginBottom: 22 }}>
-          <div style={{ fontSize: 26, fontWeight: 800, color: COLORS.text, letterSpacing: -0.8 }}>
-            Settings
-          </div>
-        </div>
+        <PageHeader breadcrumb={["Workspaces", "Settings"]} title="Settings" />
 
         {/* ===== 1 · Transcription ===== */}
         <Group label="Transcription">
@@ -698,7 +690,7 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
                         display: "flex", alignItems: "center", gap: 12,
                         border: `1px solid ${sel ? COLORS.borderStrong : COLORS.border}`,
                         
-                        background: sel ? "rgba(255,255,255,0.045)" : COLORS.surface,
+                        background: sel ? COLORS.selected : COLORS.surface,
                         borderRadius: 8, padding: "9px 12px", cursor: "pointer",
                         transition: "border-color 150ms ease",
                       }}
@@ -744,7 +736,7 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
                       )}
                       {downloading && (
                         <div style={{ height: 3, borderRadius: 2, background: COLORS.border, overflow: "hidden" }}>
-                          <div style={{ height: "100%", width: `${progress}%`, background: COLORS.blue, transition: "width 300ms ease" }} />
+                          <div style={{ height: "100%", width: `${progress}%`, background: COLORS.accent, transition: "width 300ms ease" }} />
                         </div>
                       )}
                       {modelRow(
@@ -765,7 +757,7 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
                       )}
                       {largeSt?.downloading && (
                         <div style={{ height: 3, borderRadius: 2, background: COLORS.border, overflow: "hidden" }}>
-                          <div style={{ height: "100%", width: `${Math.round((largeSt?.progress || 0) * 100)}%`, background: COLORS.blue, transition: "width 300ms ease" }} />
+                          <div style={{ height: "100%", width: `${Math.round((largeSt?.progress || 0) * 100)}%`, background: COLORS.accent, transition: "width 300ms ease" }} />
                         </div>
                       )}
                     </>
@@ -957,49 +949,6 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
           document.body
         )}
 
-        {/* About popup — the app's face card: mark, version, one-line story,
-            and honest credits. Portaled like the legal modal. */}
-        {aboutOpen && createPortal(
-          <div onClick={() => setAboutOpen(false)}
-            style={{ position: "fixed", inset: 0, zIndex: 900, background: "rgba(34,30,23,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-            <div onClick={(e) => e.stopPropagation()}
-              style={{
-                width: 460, maxWidth: "94%", overflowY: "auto",
-                background: COLORS.surface, borderRadius: 16, boxShadow: "0 24px 70px rgba(0,0,0,0.35)",
-                padding: "26px 28px 22px", fontFamily: FONT, textAlign: "center",
-              }}>
-              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: -10, marginRight: -12 }}>
-                <button onClick={() => setAboutOpen(false)}
-                  style={{ border: "none", background: "transparent", color: COLORS.textTertiary, cursor: "pointer", padding: 4 }}>
-                  <X size={16} />
-                </button>
-              </div>
-              <img src="./logo.png" alt="Ovio" width={84} height={84}
-                style={{ borderRadius: 20, display: "block", margin: "2px auto 14px" }} />
-              <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: -0.3, color: COLORS.text }}>Ovio</div>
-              <div style={{ fontSize: 11.5, color: COLORS.textTertiary, marginTop: 3 }}>
-                Version {appInfo?.version || "1.3.0"}{appInfo?.electron ? ` · Electron ${appInfo.electron}` : ""}
-              </div>
-              <div style={{ fontSize: 12.5, color: COLORS.textSecondary, lineHeight: 1.65, margin: "14px auto 0", maxWidth: 340 }}>
-                Talk anywhere. Ovio records from any app with a system-wide
-                shortcut, transcribes live, and writes the notes — on your
-                machine, in fully-local mode, or with the cloud providers you choose.
-              </div>
-              <div style={{ height: 1, background: COLORS.border, margin: "18px 0 14px" }} />
-              <div style={{ fontSize: 11.5, color: COLORS.textTertiary, lineHeight: 1.8 }}>
-                Local STT by <span style={{ color: COLORS.textSecondary }}>NVIDIA Parakeet-TDT</span> &amp; <span style={{ color: COLORS.textSecondary }}>whisper.cpp</span><br />
-                Notes &amp; chat by <span style={{ color: COLORS.textSecondary }}>Gemini · OpenRouter · Ollama</span><br />
-                MIT licensed — source at github.com/pulakit001/ovio
-              </div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: COLORS.text, marginTop: 14, letterSpacing: 0.2 }}>
-                Built by the team at Snippetz Labs
-              </div>
-              <div style={{ fontSize: 10.5, color: COLORS.textTertiary, marginTop: 6 }}>© {new Date().getFullYear()} Snippetz Labs. All rights reserved.</div>
-            </div>
-          </div>,
-          document.body
-        )}
-
         {/* ===== 4 · Data ===== */}
         <Group label="Data">
           <Row title="Export everything" sub="Projects, recordings and notes as a JSON backup" onClick={onExport}>
@@ -1036,7 +985,7 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
                   <button key={p.id} onClick={() => applyAmbient({ enabled: true, chords: [p.id] })}
                     style={{
                       border: `1px solid ${on ? COLORS.borderStrong : COLORS.border}`,
-                      background: on ? "rgba(255,255,255,0.05)" : COLORS.surface2,
+                      background: on ? COLORS.selected : COLORS.surface2,
                       borderRadius: 7, padding: "5px 10px", fontSize: 11.5, fontWeight: on ? 600 : 500,
                       color: on ? COLORS.text : COLORS.textSecondary, cursor: "pointer", fontFamily: FONT,
                       transition: "border-color 150ms ease, background 150ms ease",
@@ -1049,7 +998,7 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
                 style={{
                   display: "flex", alignItems: "center", gap: 5,
                   border: `1px dashed ${recordingChord ? COLORS.textSecondary : COLORS.borderStrong}`,
-                  background: recordingChord ? "rgba(255,255,255,0.05)" : COLORS.surface2,
+                  background: recordingChord ? COLORS.selected : COLORS.surface2,
                   borderRadius: 7, padding: "5px 10px", fontSize: 11.5, fontWeight: 500,
                   color: recordingChord ? COLORS.text : COLORS.textSecondary, cursor: "pointer", fontFamily: FONT,
                 }}>
@@ -1065,29 +1014,39 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
         </Group>
 
         {/* ===== 6 · Appearance ===== */}
-        <Group label="Appearance">
-          <Row title="Theme">
-            <Seg
-              value={themeMode}
-              onChange={saveTheme}
-              options={[
-                { value: "dark", label: "Dark", icon: <Moon size={12} /> },
-                { value: "light", label: "Light", icon: <Sun size={12} /> },
-              ]}
-            />
-          </Row>
-          <Row title="Animation" last>
-            <Seg
-              value={animLevel}
-              onChange={saveAnimations}
-              options={[
-                { value: "full", label: "Full" },
-                { value: "reduced", label: "Reduced" },
-                { value: "off", label: "Off" },
-              ]}
-            />
-          </Row>
-        </Group>
+        <div data-tour="settings-appearance">
+          <Group label="Appearance">
+            <Row title="Theme">
+              <Seg
+                value={themeMode}
+                onChange={saveTheme}
+                options={[
+                  { value: "light", label: "Light", icon: <Sun size={12} /> },
+                  { value: "dark", label: "Dark", icon: <Moon size={12} /> },
+                ]}
+              />
+            </Row>
+            <Row title="Animation">
+              <Seg
+                value={animLevel}
+                onChange={saveAnimations}
+                options={[
+                  { value: "full", label: "Full" },
+                  { value: "reduced", label: "Reduced" },
+                  { value: "off", label: "Off" },
+                ]}
+              />
+            </Row>
+            <Row
+              title="Take the tour again"
+              sub="A short walkthrough of the dashboard, recorder and settings"
+              onClick={onReplayTour}
+              last
+            >
+              <span style={{ fontSize: 12, fontWeight: 600, color: COLORS.textSecondary }}>Replay</span>
+            </Row>
+          </Group>
+        </div>
 
         {/* ===== 7 · AI behavior ===== */}
         <Group label="AI Behavior">
@@ -1129,7 +1088,7 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
                   >
                     <div style={{
                       width: 26, height: 16, borderRadius: 8, position: "relative", flexShrink: 0,
-                      background: on ? "rgba(255,255,255,0.85)" : COLORS.borderStrong, transition: "background 150ms ease",
+                      background: on ? COLORS.text : COLORS.borderStrong, transition: "background 150ms ease",
                     }}>
                       <div style={{ position: "absolute", top: 2, width: 12, height: 12, borderRadius: 999, background: "#fff", left: on ? 12 : 2, transition: "left 150ms ease" }} />
                     </div>
@@ -1160,15 +1119,8 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
           )}
         </Group>
 
-        {/* ===== 8 · About & Legal ===== */}
-        <Group label="About & Legal">
-          <Row
-            title="About Ovio"
-            sub={`Version ${appInfo?.version || "…"} · Built by the team at Snippetz Labs`}
-            onClick={() => setAboutOpen(true)}
-          >
-            <Info size={14} color={COLORS.textSecondary} />
-          </Row>
+        {/* ===== 8 · Legal ===== */}
+        <Group label="Legal">
           <Row
             title="Terms of Service & Conditions"
             sub="Your rights, your data, acceptable use"

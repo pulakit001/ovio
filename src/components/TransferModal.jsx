@@ -154,7 +154,7 @@ function TargetRow({ icon, name, sub, onChoose, picked, disabled, glow }) {
         width: "100%", display: "flex", alignItems: "center", gap: 10, textAlign: "left",
         border: `1px solid ${active ? COLORS.borderStrong : hover ? COLORS.borderStrong : COLORS.border}`,
         background: active ? COLORS.selected : hover ? COLORS.surface2 : "transparent",
-        borderColor: active ? "rgba(126,155,186,0.55)" : COLORS.border,
+        borderColor: active ? "rgba(198,245,95,0.5)" : COLORS.border,
         borderRadius: 12, padding: "9px 11px", cursor: disabled ? "default" : "pointer",
         fontFamily: FONT, marginBottom: 4, opacity: disabled ? 0.35 : 1,
         transform: active ? "scale(1.015)" : "scale(1)",

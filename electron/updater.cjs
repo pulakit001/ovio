@@ -24,9 +24,28 @@ const { app } = require("electron");
 
 const RELEASES_API = "https://api.github.com/repos/pulakit001/ovio/releases?per_page=5";
 const MESSAGE_URL = "https://raw.githubusercontent.com/pulakit001/ovio/main/.updater/message.json";
-const LATEST_DMGS = "https://github.com/pulakit001/ovio/releases/latest/download/Ovio-mac.dmg";
+const RELEASE_PAGE = "https://github.com/pulakit001/ovio/releases/latest";
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
 const TIMEOUT_MS = 8000;
+
+// Each OS downloads its own installer from the same release.
+const ASSET_PATTERN = {
+  darwin: /mac-(arm64|x64)\.dmg$/i,
+  win32: /\.exe$/i,
+  linux: /\.AppImage$/i,
+};
+
+function pickAsset(release) {
+  const assets = Array.isArray(release?.assets) ? release.assets : [];
+  const pattern = ASSET_PATTERN[process.platform];
+  if (!pattern) return null;
+  const matches = assets.filter((a) => pattern.test(a.name));
+  if (process.platform === "darwin") {
+    const arch = process.arch === "arm64" ? "arm64" : "x64";
+    return matches.find((a) => a.name.includes(arch)) || matches[0] || null;
+  }
+  return matches[0] || null;
+}
 
 // Seen message ids live only in memory: a popup shows once per app run.
 // (Re-launching the app may re-show an enabled message — acceptable, and
@@ -80,11 +99,12 @@ async function checkOnce(onUpdate, onMessage) {
   if (Array.isArray(releases) && releases.length && onUpdate) {
     const latest = releases.find((r) => !r.draft);
     if (latest && compareVersions(latest.tag_name, app.getVersion()) > 0) {
+      const asset = pickAsset(latest);
       onUpdate({
         version: String(latest.tag_name).replace(/^v/, ""),
         notes: typeof latest.body === "string" ? latest.body.slice(0, 600) : "",
-        url: LATEST_DMGS,
-        releasePage: latest.html_url || "https://github.com/pulakit001/ovio/releases",
+        url: asset?.browser_download_url || latest.html_url || RELEASE_PAGE,
+        releasePage: latest.html_url || RELEASE_PAGE,
       });
     }
   }

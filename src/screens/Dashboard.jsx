@@ -1,789 +1,1064 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Clock,
-  FileText,
-  Brain,
-  Calendar,
-  Disc,
-  TrendingUp,
-  Folder,
-  ChevronDown,
-  ChevronRight,
-  Trash2,
-  PenLine,
   ArrowUpRight,
+  AudioLines,
+  CornerDownLeft,
+  HelpCircle,
   Inbox,
-  FolderInput,
-  Check,
-  Activity,
+  Mic,
+  Pencil,
+  Sparkles,
+  X,
 } from "lucide-react";
-import AnalyticsOverlay, { AnimatedNumber, WeekStrip } from "./DashboardAnalytics";
-import TransferModal from "../components/TransferModal";
-import { COLORS as T, FONT as FONT_T, GRADIENTS } from "../ui/theme";
+import { COLORS, CTA, FONT, isLight } from "../ui/theme";
+import { askLibrary } from "../services/ai";
+import { useSettings } from "../context/SettingsContext";
+import { PrimaryButton } from "../ui/kit";
 
-// Live alias: spread at render time (not module load) so a theme swap is
-// picked up. The two extra keys are theme-constant blue tints.
-const makeColors = () => ({
-  ...T,
-  noteHighlight: "rgba(86,120,154,0.08)",
-  noteBorder: "rgba(86,120,154,0.22)",
-});
-let COLORS = makeColors();
+const GENERAL_PROJECT_ID = "general-folder-project";
+const GENERAL_SUB_ID = "general-folder-sub";
 
-// Categorical chart palette — one hue, an opacity/brightness ladder. The
-// light-mode entries sit at the front so early indices stay readable on white.
-const DEPT_COLORS_DARK = ["#8AB0FF", "#5B93FF", "#56789A", "#2257DB", "#1A44AD", "#153483", "#10255C", "#0B1A3D"];
-const DEPT_COLORS_LIGHT = ["#56789A", "#2257DB", "#1A44AD", "#7E9BBA", "#7FA8FF", "#A9C4FF", "#153483", "#10255C"];
-const deptColors = () => (T.windowBg.startsWith("#F") ? DEPT_COLORS_LIGHT : DEPT_COLORS_DARK);
-
-const FONT = FONT_T;
-
-// Consistent band label — the quiet rhythm that organizes the whole page.
-// Small caps-style eyebrow with a hairline that fades out to the right.
-function SectionLabel({ icon, text, delay = 0 }) {
-  return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 7, marginBottom: 10, marginTop: 4,
-      animation: "ovioRiseSoft 500ms cubic-bezier(.16,1,.3,1) " + delay + "ms both",
-    }}>
-      {icon ? <span style={{ color: COLORS.blueBright, display: "flex" }}>{icon}</span> : (
-        <span style={{
-          width: 5, height: 5, borderRadius: 999, background: COLORS.blueBright,
-          
-        }} />
-      )}
-      <span style={{
-        fontSize: 10.5, fontWeight: 700, letterSpacing: "0.09em",
-        textTransform: "uppercase", color: COLORS.textTertiary,
-      }}>{text}</span>
-      <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg, ${COLORS.border} 0%, transparent 85%)` }} />
-    </div>
-  );
-}
-
-// Dashboard-specific motion: blur-rise entrances, a headline that settles,
-// and a shimmering skeleton state while data resolves.
 const DASH_CSS = `
-@keyframes ovioRiseSoft {
-  from { opacity: 0; transform: translateY(22px) scale(0.985); filter: blur(7px); }
-  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+@keyframes ovioLibraryEnter {
+  from { opacity: 0; transform: translateY(12px); filter: blur(4px); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
 }
-@keyframes ovioHeadline {
-  from { opacity: 0; transform: translateY(14px); letter-spacing: 0.02em; }
-  to { opacity: 1; transform: translateY(0); letter-spacing: -0.03em; }
+@keyframes ovioWave {
+  0%, 60%, 100% { transform: rotate(0deg); }
+  10% { transform: rotate(16deg); }
+  20% { transform: rotate(-8deg); }
+  30% { transform: rotate(14deg); }
+  40% { transform: rotate(-4deg); }
+  50% { transform: rotate(10deg); }
 }
-@keyframes ovioSkeleton {
-  0% { background-position: -160% 0; }
-  100% { background-position: 260% 0; }
+.library-wave {
+  display: inline-block;
+  transform-origin: 70% 75%;
+  animation: ovioWave 2.4s ease-in-out 500ms 2 both;
+  cursor: default;
 }
-@keyframes ovioRowSheen {
-  0% { transform: translateX(-120%); }
-  100% { transform: translateX(240%); }
+.library-wave:hover { animation: ovioWave 1.6s ease-in-out infinite; }
+.library-search-tray {
+  border-radius: 24px;
+  padding: 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
 }
-.ovio-hero-card {
-  position: relative;
+.library-chip {
+  appearance: none;
+  border: none;
+  border-radius: 12px;
+  padding: 0 14px;
+  height: 36px;
+  max-width: 240px;
   overflow: hidden;
-  transition: border-color 220ms ease, box-shadow 260ms ease, transform 240ms cubic-bezier(.16,1,.3,1);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 560;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, transform 180ms cubic-bezier(.16,1,.3,1);
 }
-.ovio-hero-card:hover {
-  
-  
-  
+.library-chip:active { transform: scale(0.97); }
+.library-search-bar {
+  appearance: none;
+  width: 100%;
+  height: 62px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 9px;
+  border-radius: 18px;
+  margin: 0;
+  box-sizing: border-box;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
 }
-.ovio-panel {
-  background: linear-gradient(180deg, rgba(255,255,255,0.015) 0%, rgba(255,255,255,0) 30%), var(--ovio-surface);
+.library-search-bar:focus-within { border-color: var(--ovio-border-strong) !important; }
+.library-ask-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 450;
+}
+.library-ask-input::placeholder { color: var(--ovio-text); opacity: 0.42; }
+.library-ask-ghost {
+  width: 32px; height: 32px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: 9px; background: transparent; cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+.library-ask-ghost:hover { background: var(--ovio-surface2); color: var(--ovio-text) !important; }
+@keyframes ovioSpin { to { transform: rotate(360deg); } }
+.library-spinner {
+  width: 15px; height: 15px; border-radius: 999px;
+  border: 2px solid currentColor; border-top-color: transparent;
+  animation: ovioSpin 700ms linear infinite;
+}
+@keyframes ovioShimmer { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+.library-skeleton { display: block; height: 11px; border-radius: 6px; animation: ovioShimmer 1.3s ease-in-out infinite; }
+.library-answer {
+  border-radius: 16px;
+  padding: 18px 20px 16px;
+  animation: ovioLibraryEnter 380ms cubic-bezier(.16,1,.3,1) both;
+}
+.library-cite {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 17px; height: 17px; padding: 0 4px; margin: 0 1px;
+  border: none; border-radius: 5px; vertical-align: 2px;
+  font-family: inherit; font-size: 10px; font-weight: 650; cursor: pointer;
+  transition: color 150ms ease;
+}
+.library-cite:hover { color: var(--ovio-text) !important; }
+.library-source {
+  display: inline-flex; align-items: center; gap: 7px; max-width: 260px;
+  height: 30px; padding: 0 11px; border-radius: 9px; background: transparent;
+  font-family: inherit; font-size: 12px; font-weight: 550; cursor: pointer;
+  transition: border-color 150ms ease, color 150ms ease, background 150ms ease;
+}
+.library-source:hover { border-color: var(--ovio-border-strong) !important; color: var(--ovio-text) !important; background: var(--ovio-surface2); }
+.library-chip:focus-visible,
+.library-cite:focus-visible,
+.library-source:focus-visible,
+.library-ask-ghost:focus-visible {
+  outline: 2px solid var(--ovio-text);
+  outline-offset: 2px;
+}
+.library-project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 16px;
+}
+.library-project-card > * {
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+}
+.library-folder-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 14px;
+}
+.library-project-card {
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  min-height: 236px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  text-align: left;
+  color: var(--ovio-text);
+  background: var(--ovio-surface);
   border: 1px solid var(--ovio-border);
-  border-radius: 20px;
+  border-radius: 16px;
+  padding: 0;
+  overflow: hidden;
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform 220ms cubic-bezier(.16,1,.3,1), border-color 180ms ease, background 180ms ease;
 }
-.ovio-panel-row { transition: background 150ms ease, transform 180ms cubic-bezier(.16,1,.3,1); }
-.ovio-panel-row:hover { background: var(--ovio-surface2); }
+.library-project-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--ovio-border-strong);
+  background: var(--ovio-surface2);
+}
+.library-project-card:focus-visible,
+.library-back:focus-visible,
+.library-icon-button:focus-visible,
+.library-recording-main:focus-visible,
+.library-recording-actions:focus-visible,
+.library-action:focus-visible,
+.library-more:focus-visible {
+  outline: 2px solid var(--ovio-text);
+  outline-offset: 3px;
+}
+.library-project-card:hover .library-project-arrow { transform: translate(2px, -2px); color: var(--ovio-text); }
+.library-project-arrow { transition: transform 180ms cubic-bezier(.16,1,.3,1), color 180ms ease; }
+.library-project-edit { opacity: 0; }
+.library-project-card:hover .library-project-edit,
+.library-project-card:focus-within .library-project-edit { opacity: 1; }
+@media (hover: none) {
+  .library-project-edit { opacity: 1; }
+}
+.library-project-rename {
+  width: 100%;
+  box-sizing: border-box;
+  margin: -3px 0;
+  padding: 3px 8px;
+  border: 1px solid var(--ovio-border-strong);
+  border-radius: 8px;
+  background: var(--ovio-surface2);
+  color: var(--ovio-text);
+  font-family: inherit;
+  font-size: 19px;
+  font-weight: 620;
+  letter-spacing: -0.022em;
+  line-height: 1.22;
+  outline: none;
+  transition: border-color 160ms ease;
+}
+.library-project-rename:focus { border-color: var(--ovio-text); }
+.library-folder-card {
+  background: var(--ovio-surface);
+  border: 1px solid var(--ovio-border);
+  border-radius: 16px;
+  overflow: hidden;
+  animation: ovioLibraryEnter 440ms cubic-bezier(.16,1,.3,1) both;
+}
+.library-folder-head { transition: background 160ms ease; }
+.library-folder-head:hover { background: var(--ovio-surface2); }
+.library-recording {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 10px;
+  padding: 0 10px;
+  transition: background 150ms ease;
+}
+.library-recording:hover { background: var(--ovio-surface2); }
+.library-recording-main {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  padding: 9px 0;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+.library-recording .library-recording-actions { opacity: 0; transition: opacity 150ms ease; }
+.library-recording:hover .library-recording-actions,
+.library-recording:focus-within .library-recording-actions { opacity: 1; }
+.library-icon-button,
+.library-action,
+.library-back,
+.library-more {
+  font-family: inherit;
+  transition: color 150ms ease, border-color 150ms ease, background 150ms ease, transform 180ms cubic-bezier(.16,1,.3,1);
+}
+.library-icon-button:hover,
+.library-action:hover,
+.library-back:hover { color: var(--ovio-text); border-color: var(--ovio-border-strong); background: var(--ovio-surface2); }
+.library-more:hover { color: var(--ovio-text); }
+@media (max-width: 820px) {
+  .library-project-grid,
+  .library-folder-grid { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .library-wave, .library-wave:hover, .library-skeleton { animation: none; }
+}
+@media (max-width: 620px) {
+  .library-page { padding-left: 20px !important; padding-right: 20px !important; }
+  .library-greeting-title { font-size: 34px !important; }
+  .library-project-card { min-height: 220px; }
+  .library-recording-actions { opacity: 1 !important; }
+}
 `;
 
-// Shimmering skeleton block — shown while stats "resolve" (one beat), giving
-// the page a deliberate, polished load instead of a pop-in.
-function Skeleton({ w = "100%", h = 14, r = 8, style }) {
-  return (
-    <div style={{
-      width: w, height: h, borderRadius: r,
-      background: `linear-gradient(100deg, rgba(255,255,255,0.04) 30%, rgba(255,255,255,0.10) 50%, rgba(255,255,255,0.04) 70%)`,
-      backgroundSize: "220% 100%",
-      animation: "ovioSkeleton 1.4s ease-in-out infinite",
-      ...style,
-    }} />
-  );
+function formatDate(timestamp) {
+  const date = new Date(timestamp);
+  const sameYear = date.getFullYear() === new Date().getFullYear();
+  return date.toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+    ...(sameYear ? {} : { year: "numeric" }),
+  });
 }
 
-function formatTime(totalSeconds) {
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const s = Math.floor(totalSeconds % 60);
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
+function formatLatest(timestamp) {
+  if (!timestamp) return "No recordings yet";
+  return `Last recorded ${formatDate(timestamp)}`;
 }
 
-function formatDurationHr(min) {
-  if (min < 60) return `${min}m`;
-  const h = Math.floor(min / 60);
-  const m = Math.round(min % 60);
-  return m > 0 ? `${h}h ${m}m` : `${h}h`;
-}
+const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
+const byNewest = (recordings) => (recordings || []).slice().sort((a, b) => b.createdAt - a.createdAt);
 
-function formatDate(ts) {
-  const d = new Date(ts);
-  return d.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
-}
+function ProjectCard({ project, index, onOpen, onRename, general = false }) {
+  const visibleFolders = project.subs.slice(0, 3);
+  const remainingFolders = project.subs.length - visibleFolders.length;
+  const [renaming, setRenaming] = useState(false);
+  const [draft, setDraft] = useState("");
+  const renameInputRef = useRef(null);
 
-// Editorial hero stat — huge readable numeral, quiet label, a hairline
-// sparkline of context. No icons-in-boxes, no progress rings: the NUMBER
-// is the interface. Hover reveals a subtle "Analyze →" affordance.
-function StatCard({ label, value, sub, onClick, subtitle, animate, delay = 0, sparkData }) {
-  const [ready, setReady] = useState(false);
   useEffect(() => {
-    const t = setTimeout(() => setReady(true), 620 + delay); // one beat past the skeleton
-    return () => clearTimeout(t);
-  }, [delay]);
-  const [lift, setLift] = useState(false);
-  const maxV = Math.max(...(sparkData || [1]), 1);
+    if (!renaming) return;
+    renameInputRef.current?.focus();
+    renameInputRef.current?.select();
+  }, [renaming]);
+
+  const beginRename = (event) => {
+    event.stopPropagation();
+    if (general || !onRename) return;
+    setDraft(project.name || "");
+    setRenaming(true);
+  };
+
+  const commitRename = () => {
+    const clean = (draft || "").trim();
+    setRenaming(false);
+    if (!clean || clean === project.name) return;
+    onRename?.(project.id, clean);
+  };
+
+  const cancelRename = () => {
+    setRenaming(false);
+    setDraft("");
+  };
+
   return (
     <div
-      className="ovio-hero-card"
-      onClick={onClick}
-      onMouseEnter={() => setLift(true)}
-      onMouseLeave={() => setLift(false)}
-      title={subtitle}
-      style={{
-        flex: "1 1 200px", minWidth: 190,
-        background: "linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0) 40%), var(--ovio-surface)",
-        border: `1px solid ${lift ? COLORS.borderStrong : COLORS.border}`,
-        borderRadius: 22,
-        padding: "18px 20px 14px",
-        display: "flex", flexDirection: "column", gap: 6,
-        cursor: onClick ? "pointer" : "default",
-        boxShadow: "none",
-        animation: `ovioRiseSoft 640ms cubic-bezier(.16,1,.3,1) ${delay}ms both`,
+      role="button"
+      tabIndex={0}
+      className="library-project-card"
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (renaming) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen?.();
+        }
       }}
+      style={{ animation: `ovioLibraryEnter 500ms cubic-bezier(.16,1,.3,1) ${70 + index * 45}ms both` }}
     >
-      <div style={{ fontSize: 11.5, fontWeight: 600, color: COLORS.textSecondary, letterSpacing: "0.02em" }}>{label}</div>
-      {ready ? (
-        <div style={{
-          fontSize: 42, fontWeight: 750, color: COLORS.text, letterSpacing: "-0.035em",
-          lineHeight: 1.05, fontVariantNumeric: "tabular-nums",
-          animation: "ovioHeadline 520ms cubic-bezier(.16,1,.3,1) both",
-        }}>
-          {animate ? <AnimatedNumber value={value} /> : value}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, padding: "20px 20px 0" }}>
+        <div
+          style={{
+            width: 48,
+            height: 48,
+            flexShrink: 0,
+            borderRadius: 13,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: COLORS.surface3,
+            border: `1px solid ${COLORS.border}`,
+            color: COLORS.text,
+            fontSize: 19,
+            fontWeight: 650,
+            letterSpacing: "-0.03em",
+          }}
+        >
+          {general ? <Inbox size={20} strokeWidth={1.7} /> : (project.name || "?").trim().charAt(0).toUpperCase()}
         </div>
-      ) : (
-        <Skeleton w={92} h={38} r={10} style={{ marginTop: 3 }} />
-      )}
-      {ready && sub ? (
-        <div style={{ fontSize: 11.5, color: COLORS.textTertiary, animation: "ovioFadeIn 400ms ease 120ms both" }}>{sub}</div>
-      ) : (
-        <Skeleton w="58%" h={10} r={5} style={{ marginTop: 2 }} />
-      )}
-      {/* Hairline sparkline — context without a chart frame */}
-      {ready && sparkData && sparkData.length > 1 && (
-        <svg width="100%" height="22" viewBox="0 0 100 22" preserveAspectRatio="none" style={{ marginTop: 6, opacity: 0.8 }}>
-          <polyline
-            points={sparkData.map((v, i) => `${(i / (sparkData.length - 1)) * 100},${20 - (v / maxV) * 17}`).join(" ")}
-            fill="none" stroke={COLORS.blueBright} strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round"
-            style={{  }}
+        <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+          {!general && onRename && (
+            <button
+              type="button"
+              className="library-icon-button library-project-edit"
+              onClick={beginRename}
+              title="Rename project"
+              aria-label={`Rename ${project.name}`}
+              style={{
+                width: 30,
+                height: 30,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                border: "1px solid transparent",
+                borderRadius: 8,
+                background: "transparent",
+                color: COLORS.textTertiary,
+                cursor: "pointer",
+              }}
+            >
+              <Pencil size={13} />
+            </button>
+          )}
+          <ArrowUpRight className="library-project-arrow" size={18} color={COLORS.textTertiary} style={{ flexShrink: 0 }} />
+        </div>
+      </div>
+
+      <div style={{ padding: "18px 20px 18px", flex: 1, display: "flex", flexDirection: "column" }}>
+        {renaming ? (
+          <input
+            ref={renameInputRef}
+            className="library-project-rename"
+            value={draft}
+            maxLength={60}
+            aria-label="Project name"
+            onChange={(event) => setDraft(event.target.value)}
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              event.stopPropagation();
+              if (event.key === "Enter") {
+                event.preventDefault();
+                commitRename();
+              } else if (event.key === "Escape") {
+                event.preventDefault();
+                cancelRename();
+              }
+            }}
+            onBlur={commitRename}
           />
-          <circle cx="100" cy={20 - (sparkData[sparkData.length - 1] / maxV) * 17} r="1.8" fill={COLORS.blueBright} />
-        </svg>
-      )}
-      {onClick && (
-        <span style={{
-          position: "absolute", right: 16, top: 16,
-          display: "flex", alignItems: "center", gap: 3, fontSize: 10.5, fontWeight: 700,
-          color: COLORS.blueBright, opacity: lift ? 1 : 0, transform: lift ? "translateX(0)" : "translateX(-4px)",
-          transition: "opacity 200ms ease, transform 220ms cubic-bezier(.16,1,.3,1)", whiteSpace: "nowrap",
-        }}>
-          Analyze <ChevronRight size={11} />
-        </span>
-      )}
+        ) : (
+          <div
+            title={project.name}
+            style={{
+              color: COLORS.text,
+              fontSize: 19,
+              fontWeight: 620,
+              letterSpacing: "-0.022em",
+              lineHeight: 1.22,
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+              overflowWrap: "anywhere",
+            }}
+          >
+            {project.name}
+          </div>
+        )}
+        <div style={{ color: COLORS.textTertiary, fontSize: 12.5, marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {general ? "Your recording inbox" : `${plural(project.subs.length, "subproject")} · ${plural(project.total, "recording")}`}
+        </div>
+
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: "auto", paddingTop: 18, minWidth: 0 }}>
+          {general ? (
+            <FolderPill label={plural(project.total, "unsorted recording")} />
+          ) : visibleFolders.length > 0 ? (
+            <>
+              {visibleFolders.map((sub) => <FolderPill key={sub.id} label={sub.name} />)}
+              {remainingFolders > 0 && <FolderPill label={`+${remainingFolders}`} />}
+            </>
+          ) : (
+            <span style={{ color: COLORS.textTertiary, fontSize: 12 }}>No subprojects yet</span>
+          )}
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          minHeight: 44,
+          padding: "0 20px",
+          borderTop: `1px solid ${COLORS.border}`,
+          color: COLORS.textTertiary,
+          fontSize: 11.5,
+          fontVariantNumeric: "tabular-nums",
+          whiteSpace: "nowrap",
+        }}
+      >
+        <AudioLines size={13} style={{ flexShrink: 0 }} />
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{formatLatest(project.latest)}</span>
+      </div>
     </div>
   );
 }
 
-function BarVisualization({ data, unit = "" }) {
-  const max = Math.max(...data.map((d) => d.value), 1);
-  const [hover, setHover] = useState(null);
+function FolderPill({ label }) {
   return (
-    <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 80, padding: "0 4px", position: "relative" }}>
-      {data.map((d, i) => (
-        <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, position: "relative" }}
-          onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
-          {hover === i && (
-            <div style={{
-              position: "absolute", bottom: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)",
-              background: COLORS.sidebarBg, color: "#fff", fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap",
-              padding: "4px 8px", borderRadius: 6, pointerEvents: "none", zIndex: 10,
-              boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
-            }}>
-              {d.label}: {d.value}{unit}
-              <div style={{ position: "absolute", top: "100%", left: "50%", transform: "translateX(-50%)", border: "5px solid transparent", borderTopColor: COLORS.sidebarBg }} />
-            </div>
-          )}
-          <div style={{
-            width: "100%", maxWidth: 28,
-            height: `${Math.max((d.value / max) * 70, 3)}px`,
-            background: d.highlight ? COLORS.blueBright : "#1D2B66",
-            borderRadius: 4,
-            transition: "height 300ms ease, opacity 200ms ease, filter 200ms ease",
-            opacity: hover === null ? (d.highlight ? 1 : 0.55) : (hover === i ? 1 : 0.4),
-            filter: hover === i ? "brightness(1.08)" : "none",
-            cursor: "pointer",
-          }} />
-          <span style={{ fontSize: 9, color: COLORS.textTertiary, whiteSpace: "nowrap" }}>{d.label}</span>
+    <span
+      style={{
+        minWidth: 0,
+        maxWidth: "min(160px, 100%)",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+        // Squared tag, not a pill: a small radius and a flat fill read as a
+        // label on the card rather than a chip floating above it.
+        borderRadius: 6,
+        background: COLORS.surface3,
+        color: COLORS.textSecondary,
+        padding: "3px 7px",
+        fontSize: 10.5,
+        fontWeight: 600,
+        letterSpacing: "0.01em",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function greetingFor(hour) {
+  if (hour >= 5 && hour < 12) return "Good morning";
+  if (hour >= 12 && hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+function useFirstName() {
+  const { settings } = useSettings();
+  const saved = String(settings?.userName || "").trim();
+  const [name, setName] = useState("");
+  useEffect(() => {
+    if (saved) return undefined;
+    let alive = true;
+    window.electronAPI?.userName?.()
+      .then((full) => {
+        const first = String(full || "").trim().split(/\s+/)[0] || "";
+        if (alive) setName(first ? first.charAt(0).toUpperCase() + first.slice(1) : "");
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [saved]);
+  return saved || name;
+}
+
+function Greeting({ onOpenRecorder }) {
+  const name = useFirstName();
+  const greeting = greetingFor(new Date().getHours());
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "flex-end",
+        justifyContent: "space-between",
+        flexWrap: "wrap",
+        gap: 20,
+        marginBottom: 26,
+        animation: "ovioLibraryEnter 520ms cubic-bezier(.16,1,.3,1) both",
+      }}
+    >
+      <div style={{ minWidth: 0 }}>
+        <h1
+          className="library-greeting-title"
+          style={{
+            margin: 0,
+            color: COLORS.text,
+            fontSize: 44,
+            fontWeight: 560,
+            letterSpacing: "-0.04em",
+            lineHeight: 1.08,
+            overflowWrap: "anywhere",
+          }}
+        >
+          {greeting}{name ? `, ${name}` : ""}{" "}
+          <span className="library-wave" role="img" aria-label="waving hand">👋</span>
+        </h1>
+        <div style={{ color: COLORS.textSecondary, fontSize: 15, marginTop: 10 }}>
+          Here are your projects. Pick up where you left off.
         </div>
+      </div>
+      <span data-tour="record" style={{ display: "inline-flex", borderRadius: 999 }}>
+        <PrimaryButton onClick={onOpenRecorder} style={{ padding: "12px 18px", fontSize: 13 }}>
+          <Mic size={14} /> Record
+        </PrimaryButton>
+      </span>
+    </div>
+  );
+}
+
+// The Ask surface answers across the whole library. These rotate the most
+// useful openings; the "What can I ask?" panel below lists the full range so
+// people never have to guess what Ovio understands.
+const CURATED_QUESTIONS = [
+  "What did I record this week?",
+  "Summarize my latest recording",
+  "What are my open action items?",
+  "What decisions were made recently?",
+];
+
+// Grouped so the help panel reads like a capability map, not a wall of
+// prompts. Every example is answerable from transcripts + AI notes.
+const ASK_CATEGORIES = [
+  {
+    label: "Recap",
+    questions: [
+      "Summarize my latest recording",
+      "What did I record this week?",
+      "Recap everything from last month",
+    ],
+  },
+  {
+    label: "Actions & decisions",
+    questions: [
+      "What are my open action items?",
+      "What did I commit to?",
+      "What decisions were made recently?",
+      "List every deadline that came up",
+    ],
+  },
+  {
+    label: "People & details",
+    questions: [
+      "Who was in my last meeting?",
+      "Where did we discuss pricing?",
+      "What numbers came up this week?",
+      "What questions are still unanswered?",
+    ],
+  },
+  {
+    label: "Ideas & themes",
+    questions: [
+      "What ideas did I capture?",
+      "What themes keep coming up?",
+      "What changed between my last two recordings?",
+    ],
+  },
+];
+
+async function fetchAiKeys() {
+  try {
+    const plain = await window.settingsAPI?.getPlain?.();
+    return {
+      groqKeys: plain?.groqKeys || [],
+      openrouterKeys: plain?.openrouterKeys || [],
+      aiProvider: plain?.aiProvider || "cloud",
+      ollama: { url: plain?.ollamaUrl, model: plain?.ollamaModel },
+      aiBehavior: plain?.aiBehavior || {},
+    };
+  } catch {
+    return { groqKeys: [], openrouterKeys: [], aiProvider: "cloud", ollama: {}, aiBehavior: {} };
+  }
+}
+
+function renderInline(text, sources, onCite, keyBase) {
+  const parts = String(text).split(/(\*\*[^*]+\*\*|\[\d+\])/g);
+  return parts.map((part, i) => {
+    const key = `${keyBase}-${i}`;
+    if (/^\*\*[^*]+\*\*$/.test(part)) return <strong key={key} style={{ fontWeight: 650, color: COLORS.text }}>{part.slice(2, -2)}</strong>;
+    const cite = part.match(/^\[(\d+)\]$/);
+    if (cite) {
+      const src = sources.find((x) => x.n === Number(cite[1]));
+      if (!src) return null;
+      return (
+        <button
+          key={key}
+          type="button"
+          className="library-cite"
+          title={`Open “${src.label}”`}
+          onClick={() => onCite(src)}
+          style={{ background: COLORS.surface3, color: COLORS.textSecondary }}
+        >
+          {src.n}
+        </button>
+      );
+    }
+    return part;
+  });
+}
+
+function AnswerBody({ text, sources, onCite }) {
+  const lines = String(text || "").replace(/\r/g, "").split("\n");
+  const blocks = [];
+  let list = null;
+  lines.forEach((raw, i) => {
+    const line = raw.replace(/^#{1,6}\s+/, "");
+    const bullet = line.match(/^\s*(?:[-*•]|\d+[.)])\s+(.*)$/);
+    if (bullet) {
+      if (!list) { list = []; blocks.push({ type: "list", items: list }); }
+      list.push(bullet[1]);
+      return;
+    }
+    list = null;
+    if (line.trim()) blocks.push({ type: "p", text: line, i });
+  });
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 9, color: COLORS.textSecondary, fontSize: 14, lineHeight: 1.62 }}>
+      {blocks.map((block, bi) => block.type === "list" ? (
+        <ul key={bi} style={{ margin: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 4 }}>
+          {block.items.map((item, ii) => <li key={ii}>{renderInline(item, sources, onCite, `${bi}-${ii}`)}</li>)}
+        </ul>
+      ) : (
+        <p key={bi} style={{ margin: 0 }}>{renderInline(block.text, sources, onCite, `${bi}`)}</p>
       ))}
     </div>
   );
 }
 
-function MeetingRow({ rec, onSelect }) {
+function AskPanel({ library, recordingCount, onOpenSearch, onOpenSource }) {
+  const light = isLight();
+  const [value, setValue] = useState("");
+  const [answer, setAnswer] = useState(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const askId = useRef(0);
+
+  const latestProject = library.filter((p) => !p.general && p.latest > 0).sort((a, b) => b.latest - a.latest)[0];
+  const chips = recordingCount === 0
+    ? []
+    : [
+        ...CURATED_QUESTIONS,
+        ...(latestProject ? [`Recap ${latestProject.name.length > 30 ? `${latestProject.name.slice(0, 30)}…` : latestProject.name}`] : []),
+      ];
+
+  const ask = async (raw) => {
+    const question = String(raw || "").trim();
+    if (!question) return;
+    const id = ++askId.current;
+    setValue(question);
+    if (recordingCount === 0) {
+      setAnswer({ question, text: "Your library is empty right now. Make a recording and I can answer questions about it.", sources: [] });
+      return;
+    }
+    setAnswer({ question, loading: true, sources: [] });
+    try {
+      const keys = await fetchAiKeys();
+      const res = await askLibrary(keys, question, collectRecordings(library));
+      if (id !== askId.current) return;
+      setAnswer({ question, text: res.text || "I couldn’t find an answer in your recordings.", sources: res.sources || [] });
+    } catch (err) {
+      if (id !== askId.current) return;
+      setAnswer({ question, error: err?.message || "Couldn’t reach the AI. Check your keys in Settings.", sources: [] });
+    }
+  };
+
+  const clear = () => {
+    askId.current += 1;
+    setAnswer(null);
+    setValue("");
+    setHelpOpen(false);
+  };
+
+  const hasText = value.trim().length > 0;
+  const tray = light
+    ? { background: "rgba(10,10,10,0.035)", border: `1px solid ${COLORS.border}` }
+    : { background: "rgba(255,255,255,0.04)", border: `1px solid ${COLORS.border}` };
+  const chipStyle = light
+    ? { background: "#FFFFFF", color: COLORS.textSecondary, boxShadow: `inset 0 0 0 1px ${COLORS.border}` }
+    : { background: "rgba(255,255,255,0.07)", color: "#D6D6DB" };
+  const bar = light
+    ? { background: "#FFFFFF", border: `1px solid ${COLORS.borderStrong}`, boxShadow: "0 1px 2px rgba(10,10,10,0.04), 0 10px 28px rgba(10,10,10,0.06)" }
+    : { background: "#0A0A0B", border: "1px solid rgba(255,255,255,0.1)" };
+  const helpCard = light
+    ? { background: "#FFFFFF", border: `1px solid ${COLORS.border}`, boxShadow: "0 8px 26px rgba(10,10,10,0.06)" }
+    : { background: COLORS.surface, border: `1px solid ${COLORS.border}` };
+  const helpChip = light
+    ? { background: "transparent", border: `1px solid ${COLORS.borderStrong}`, color: COLORS.textSecondary }
+    : { background: "transparent", border: "1px solid rgba(255,255,255,0.14)", color: COLORS.textSecondary };
+
   return (
-    <div onClick={() => onSelect(rec)}
-      style={{
-        display: "flex", alignItems: "center", gap: 12, padding: "12px 16px",
-        background: COLORS.surface, border: `1px solid ${COLORS.border}`,
-        borderRadius: 10, cursor: "pointer", transition: "border-color 150ms ease",
-      }}
-      onMouseEnter={(e) => (e.currentTarget.style.borderColor = COLORS.borderStrong)}
-      onMouseLeave={(e) => (e.currentTarget.style.borderColor = COLORS.border)}>
-      <div style={{ width: 36, height: 36, borderRadius: 999, background: COLORS.surface2, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-        <Disc size={15} color={COLORS.textSecondary} />
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 500, color: COLORS.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rec.label}</div>
-        <div style={{ fontSize: 11.5, color: COLORS.textTertiary, marginTop: 2, display: "flex", gap: 10, alignItems: "center" }}>
-          <span>{formatDate(rec.createdAt)}</span>
-          <span>·</span>
-          <span>{formatTime(rec.duration || 0)}</span>
-          <span>·</span>
-          <span>{(rec.transcript || []).length} lines</span>
-          {(rec.notes || []).length > 0 && (
-            <>
-              <span>·</span>
-              <span style={{ display: "flex", alignItems: "center", gap: 2 }}>
-                <PenLine size={9} /> {(rec.notes || []).length}
-              </span>
-            </>
+    <div
+      data-tour="ask"
+      className="library-search-tray"
+      style={{ ...tray, animation: "ovioLibraryEnter 520ms cubic-bezier(.16,1,.3,1) 60ms both" }}
+    >
+      {!answer && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, minWidth: 0, alignItems: "center" }}>
+            {chips.map((label) => (
+              <button
+                key={label}
+                type="button"
+                className="library-chip"
+                title={label}
+                onClick={() => ask(label)}
+                style={chipStyle}
+              >
+                {label}
+              </button>
+            ))}
+            <button
+              type="button"
+              className="library-chip"
+              onClick={() => setHelpOpen((open) => !open)}
+              title="See everything you can ask"
+              aria-expanded={helpOpen}
+              style={{ ...helpChip, display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600 }}
+            >
+              <HelpCircle size={12} /> What can I ask?
+            </button>
+          </div>
+
+          {helpOpen && (
+            <div
+              className="library-ask-help"
+              style={{
+                ...helpCard,
+                borderRadius: 14,
+                padding: "14px 16px",
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+                animation: "ovioLibraryEnter 220ms cubic-bezier(.16,1,.3,1) both",
+              }}
+            >
+              <div style={{ fontSize: 12.5, color: COLORS.textSecondary, lineHeight: 1.55 }}>
+                Ask in plain language. Ovio reads across <strong style={{ color: COLORS.text, fontWeight: 600 }}>every recording</strong> —
+                transcripts, your notes and AI notes — then cites what it used.
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14 }}>
+                {ASK_CATEGORIES.map((category) => (
+                  <div key={category.label} style={{ minWidth: 0 }}>
+                    <div style={{
+                      fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em",
+                      textTransform: "uppercase", color: COLORS.textTertiary, marginBottom: 6,
+                    }}>
+                      {category.label}
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                      {category.questions.map((question) => (
+                        <button
+                          key={question}
+                          type="button"
+                          onClick={() => { setHelpOpen(false); ask(question); }}
+                          style={{
+                            border: "none", background: "transparent", textAlign: "left",
+                            padding: "4px 0", cursor: "pointer", fontFamily: FONT,
+                            fontSize: 12, lineHeight: 1.45, color: COLORS.textSecondary,
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.color = COLORS.text; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.color = COLORS.textSecondary; }}
+                        >
+                          {question}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
         </div>
-      </div>
-      {rec.aiNotes && (
-        <div style={{ width: 24, height: 24, borderRadius: 6, background: COLORS.surface2, border: `1px solid ${COLORS.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <Brain size={12} color={COLORS.textSecondary} />
+      )}
+
+      <form
+        className="library-search-bar"
+        onSubmit={(e) => { e.preventDefault(); ask(value); }}
+        style={bar}
+      >
+        <span
+          aria-hidden
+          style={{
+            width: 44,
+            height: 44,
+            flexShrink: 0,
+            borderRadius: 12,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "#C6F55F",
+            color: "#0A0F02",
+          }}
+        >
+          <Sparkles size={17} strokeWidth={2} />
+        </span>
+        <input
+          className="library-ask-input"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Escape") clear(); }}
+          placeholder="Ask anything about your recordings"
+          aria-label="Ask a question about your recordings"
+          style={{ color: COLORS.text }}
+        />
+        {answer && (
+          <button
+            type="button"
+            className="library-ask-ghost"
+            onClick={clear}
+            title="Clear (Esc)"
+            aria-label="Clear question"
+            style={{ color: COLORS.textTertiary }}
+          >
+            <X size={15} />
+          </button>
+        )}
+        <button
+          type="submit"
+          disabled={!hasText || answer?.loading}
+          title="Ask (Enter)"
+          aria-label="Ask"
+          style={{
+            width: 44,
+            height: 44,
+            flexShrink: 0,
+            border: "none",
+            borderRadius: 12,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: hasText ? "pointer" : "default",
+            background: hasText ? CTA.bg : light ? COLORS.surface2 : "rgba(255,255,255,0.08)",
+            color: hasText ? CTA.fg : COLORS.textTertiary,
+            transition: "background 180ms ease, color 180ms ease",
+          }}
+        >
+          {answer?.loading ? <span className="library-spinner" /> : <CornerDownLeft size={17} strokeWidth={2} />}
+        </button>
+      </form>
+
+      {answer && (
+        <div
+          className="library-answer"
+          style={{
+            background: light ? "#FFFFFF" : COLORS.surface,
+            border: `1px solid ${COLORS.border}`,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8, color: COLORS.textTertiary, fontSize: 12, marginBottom: 12, minWidth: 0 }}>
+            <Sparkles size={12} style={{ flexShrink: 0 }} />
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{answer.question}</span>
+          </div>
+          {answer.loading ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 9 }} aria-live="polite" aria-label="Reading your recordings">
+              {[92, 78, 64].map((w) => (
+                <span key={w} className="library-skeleton" style={{ width: `${w}%`, background: COLORS.surface2 }} />
+              ))}
+              <span style={{ color: COLORS.textTertiary, fontSize: 12, marginTop: 4 }}>Reading across {plural(recordingCount, "recording")}…</span>
+            </div>
+          ) : answer.error ? (
+            <div style={{ color: COLORS.textSecondary, fontSize: 13.5, lineHeight: 1.55 }}>{answer.error}</div>
+          ) : (
+            <div aria-live="polite">
+              <AnswerBody text={answer.text} sources={answer.sources} onCite={onOpenSource} />
+              {answer.sources.length > 0 && (
+                <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${COLORS.border}`, display: "flex", flexWrap: "wrap", gap: 7 }}>
+                  {answer.sources.slice(0, 6).map((src) => (
+                    <button
+                      key={src.id}
+                      type="button"
+                      className="library-source"
+                      onClick={() => onOpenSource(src)}
+                      title={`Open “${src.label}”`}
+                      style={{ border: `1px solid ${COLORS.border}`, color: COLORS.textSecondary }}
+                    >
+                      <span style={{ color: COLORS.textTertiary, fontVariantNumeric: "tabular-nums" }}>{src.n}</span>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{src.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {!answer.loading && (
+            <button
+              type="button"
+              className="library-more"
+              onClick={() => onOpenSearch?.(answer.question)}
+              style={{ marginTop: 14, padding: 0, border: "none", background: "transparent", color: COLORS.textTertiary, cursor: "pointer", fontSize: 12, fontWeight: 550 }}
+            >
+              Search for exact matches instead
+            </button>
+          )}
         </div>
       )}
-      <ChevronRight size={14} color={COLORS.textTertiary} />
     </div>
   );
 }
 
-export default function Dashboard({ projects, recordingsBySub, setRecordingsBySub, onSelectRecording, onNavigateToProject, onClearAll }) {
-  // Refresh the live-colors snapshot on every render so a theme swap applies
-  // without a reload (COLORS reads the mutated theme object).
-  COLORS = makeColors();
-  const [expandedDept, setExpandedDept] = useState(null);
-  const [confirmClear, setConfirmClear] = useState(false);
-  const [analytics, setAnalytics] = useState(null);
-  const contentRef = useRef(null);
+function collectRecordings(library) {
+  return library.flatMap((p) => (p.general
+    ? p.recs.map((r) => ({ ...r, sid: GENERAL_SUB_ID, pid: GENERAL_PROJECT_ID, project: "General Folder", folder: "" }))
+    : p.subs.flatMap((sub) => sub.recs.map((r) => ({ ...r, sid: sub.id, pid: p.id, project: p.name, folder: sub.name })))));
+}
 
-  const allRecordings = useMemo(() => {
-    const list = [];
-    Object.entries(recordingsBySub).forEach(([subId, recs]) => {
-      recs.forEach((r) => list.push({ ...r, subprojectId: subId }));
-    });
-    return list.sort((a, b) => b.createdAt - a.createdAt);
-  }, [recordingsBySub]);
-
-  const totalDuration = useMemo(() => allRecordings.reduce((sum, r) => sum + (r.duration || 0), 0), [allRecordings]);
-  const totalTranscriptLines = useMemo(() => allRecordings.reduce((sum, r) => sum + (r.transcript?.length || 0), 0), [allRecordings]);
-  const recordingsWithAI = useMemo(() => allRecordings.filter((r) => r.aiNotes).length, [allRecordings]);
-  const avgDuration = useMemo(() => {
-    if (allRecordings.length === 0) return 0;
-    return Math.round(totalDuration / allRecordings.length);
-  }, [totalDuration, allRecordings.length]);
-
-  const GENERAL_PROJECT_ID = "general-folder-project";
-  const GENERAL_SUB_ID = "general-folder-sub";
-
-  const deptData = useMemo(() => {
-    const depts = [];
-    projects.filter((proj) => proj.id !== GENERAL_PROJECT_ID).forEach((proj) => {
-      const subRecs = [];
-      let totalDur = 0;
-      let totalLines = 0;
-      let aiCount = 0;
-      let noteCount = 0;
-
-      proj.subprojects.forEach((sub) => {
-        const recs = recordingsBySub[sub.id] || [];
-        recs.forEach((r) => {
-          subRecs.push({ ...r, subprojectName: sub.name });
-          totalDur += r.duration || 0;
-          totalLines += r.transcript?.length || 0;
-          if (r.aiNotes) aiCount++;
-          noteCount += (r.notes?.length || 0);
-        });
-      });
-
-      depts.push({
-        id: proj.id, name: proj.name, subprojects: proj.subprojects,
-        recordings: subRecs, totalDuration: totalDur, totalLines,
-        aiCount, noteCount, meetingCount: subRecs.length,
-      });
-    });
-    return depts.sort((a, b) => b.meetingCount - a.meetingCount);
-  }, [projects, recordingsBySub]);
-
-  const durationByDept = useMemo(() => {
-    return deptData
-      .filter((d) => d.totalDuration > 0)
-      .sort((a, b) => b.totalDuration - a.totalDuration)
-      .map((d, i) => ({
-        label: d.name.slice(0, 4),
-        value: Math.round(d.totalDuration / 60),
-        color: deptColors()[i % 8],
-        highlight: true,
-      }));
-  }, [deptData]);
-
-  const handleSelectMeeting = (rec) => {
-    const proj = projects.find((p) =>
-      p.subprojects.some((s) => (recordingsBySub[s.id] || []).some((r) => r.id === rec.id))
-    );
-    const sub = proj?.subprojects.find((s) =>
-      (recordingsBySub[s.id] || []).some((r) => r.id === rec.id)
-    );
-    if (proj && sub) onSelectRecording(proj.id, sub.id, rec);
-  };
-
-  // ---- Inbox (General Folder) + per-recording transfer ----
-  const generalRecs = useMemo(
-    () => (recordingsBySub[GENERAL_SUB_ID] || []).slice().sort((a, b) => b.createdAt - a.createdAt),
-    [recordingsBySub]
+export default function Dashboard({
+  projects,
+  recordingsBySub,
+  onSelectRecording,
+  onNavigateToProject,
+  onRenameProject,
+  onOpenRecorder,
+  onOpenSearch,
+}) {
+  const library = useMemo(
+    () => projects
+      .filter((project) => project.id !== GENERAL_PROJECT_ID)
+      .map((project) => {
+        const subs = (project.subprojects || []).map((subproject) => ({
+          ...subproject,
+          recs: byNewest(recordingsBySub[subproject.id]),
+        }));
+        const recordings = subs.flatMap((subproject) => subproject.recs);
+        return {
+          ...project,
+          subs,
+          total: recordings.length,
+          latest: recordings.reduce((latest, recording) => Math.max(latest, recording.createdAt || 0), 0),
+        };
+      }),
+    [projects, recordingsBySub]
   );
-  const [inboxOpen, setInboxOpen] = useState(false);
-  const [transferFor, setTransferFor] = useState(null); // { recId, fromLabel }
-  const [transferred, setTransferred] = useState(null); // toast label
 
-  const moveTargets = useMemo(() => {
-    const list = [];
-    projects.forEach((p) => {
-      if (p.id === GENERAL_PROJECT_ID) return;
-      p.subprojects.forEach((s) => {
-        list.push({ sid: s.id, sname: s.name, pname: p.name, name: s.name });
-      });
-    });
-    return list;
-  }, [projects]);
+  const generalRecordings = useMemo(() => byNewest(recordingsBySub[GENERAL_SUB_ID]), [recordingsBySub]);
+  const generalProject = useMemo(
+    () => ({
+      id: GENERAL_PROJECT_ID,
+      name: "General Folder",
+      subs: [],
+      total: generalRecordings.length,
+      latest: generalRecordings[0]?.createdAt || 0,
+    }),
+    [generalRecordings]
+  );
 
-  const commitTransfer = (recId, toSid, toName) => {
-    const fromSid = transferFor?.fromSid || GENERAL_SUB_ID;
-    setTransferFor(null);
-    if (!recId || !toSid || toSid === fromSid) return;
-    setRecordingsBySub((prev) => {
-      const from = prev[fromSid] || [];
-      const moved = from.find((r) => r.id === recId);
-      if (!moved) return prev;
-      return {
-        ...prev,
-        [fromSid]: from.filter((r) => r.id !== recId),
-        [toSid]: [moved, ...(prev[toSid] || [])],
-      };
-    });
-    setTransferred(toName);
-    setTimeout(() => setTransferred(null), 2600);
-  };
+  const askLibraryData = useMemo(
+    () => [{ general: true, recs: generalRecordings, latest: generalProject.latest, name: "General Folder", subs: [] }, ...library],
+    [library, generalRecordings, generalProject.latest]
+  );
+  const recordingCount = useMemo(
+    () => library.reduce((n, p) => n + p.total, 0) + generalRecordings.length,
+    [library, generalRecordings]
+  );
 
-  // One deliberate loading beat: skeletons resolve into the real numbers.
-  const [booted, setBooted] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setBooted(true), 560);
-    return () => clearTimeout(t);
-  }, []);
+  // Clicking a project card hands the whole job to the Recorder tab: it owns
+  // the folder tree, the live stage and the search/move tools already.
+  const openProject = (project) => onNavigateToProject(project.id, null);
 
-  // Last 14 days of meeting counts — the hero sparkline context.
-  const spark = useMemo(() => {
-    const out = [];
-    for (let i = 13; i >= 0; i--) {
-      const day = new Date();
-      day.setHours(0, 0, 0, 0);
-      day.setDate(day.getDate() - i);
-      const next = day.getTime() + 86400000;
-      out.push(allRecordings.filter((r) => r.createdAt >= day.getTime() && r.createdAt < next).length);
-    }
-    return out;
-  }, [allRecordings]);
-
-  const greeting = (() => {
-    const h = new Date().getHours();
-    if (h < 5) return "Late night";
-    if (h < 12) return "Good morning";
-    if (h < 17) return "Good afternoon";
-    return "Good evening";
-  })();
+  const actions = (
+    <PrimaryButton onClick={onOpenRecorder} style={{ padding: "11px 17px", fontSize: 13 }}>
+      <Mic size={14} /> Record
+    </PrimaryButton>
+  );
 
   return (
     <>
-    <style>{DASH_CSS}</style>
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      {/* Header — no bar, just type on the aurora: the greeting IS the header */}
-      <div style={{
-        paddingTop: 26, paddingBottom: 4, padding: "26px 32px 4px",
-        display: "flex", alignItems: "flex-end", justifyContent: "space-between",
-      }}>
-        <div>
-          <div style={{
-            fontSize: 26, fontWeight: 800, color: COLORS.text, letterSpacing: "-0.03em", lineHeight: 1.1,
-            animation: "ovioHeadline 600ms cubic-bezier(.16,1,.3,1) both",
-          }}>
-            {greeting}
+      <style>{DASH_CSS}</style>
+      <main className="library-page" style={{ flex: 1, overflowY: "auto", padding: "0 40px 80px" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+          <Greeting onOpenRecorder={onOpenRecorder} />
+          <AskPanel
+            library={askLibraryData}
+            recordingCount={recordingCount}
+            onOpenSearch={onOpenSearch}
+            onOpenSource={(src) => onSelectRecording(src.pid, src.sid, { id: src.id })}
+          />
+          <div
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              justifyContent: "space-between",
+              gap: 16,
+              margin: "40px 2px 16px",
+              animation: "ovioLibraryEnter 520ms cubic-bezier(.16,1,.3,1) 100ms both",
+            }}
+          >
+            <h2 style={{ margin: 0, color: COLORS.text, fontSize: 20, fontWeight: 600, letterSpacing: "-0.02em" }}>
+              Your projects
+            </h2>
+            <span style={{ color: COLORS.textTertiary, fontSize: 12.5, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+              {plural(library.length, "project")} · {plural(recordingCount, "recording")}
+            </span>
           </div>
-          <div style={{
-            fontSize: 12.5, color: COLORS.textTertiary, marginTop: 3,
-            animation: "ovioRiseSoft 600ms cubic-bezier(.16,1,.3,1) 90ms both",
-          }}>
-            {allRecordings.length} recording{allRecordings.length === 1 ? "" : "s"} · {formatDurationHr(Math.round(totalDuration / 60))} captured
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          {allRecordings.length > 0 && (
-            <div style={{ position: "relative" }}>
-              {confirmClear ? (
-                <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                  <span style={{ fontSize: 11, color: COLORS.red }}>Clear all?</span>
-                  <button onClick={() => { onClearAll(); setConfirmClear(false); }}
-                    style={{ border: "none", background: COLORS.red, color: "#fff", fontSize: 10, fontWeight: 600, borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontFamily: FONT }}>Yes</button>
-                  <button onClick={() => setConfirmClear(false)}
-                    style={{ border: "none", background: COLORS.border, color: COLORS.textSecondary, fontSize: 10, fontWeight: 600, borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontFamily: FONT }}>No</button>
-                </div>
-              ) : (
-                <button onClick={() => setConfirmClear(true)}
-                  style={{ display: "flex", alignItems: "center", gap: 4, border: "none", background: "transparent", color: COLORS.textTertiary, fontSize: 11, cursor: "pointer", fontFamily: FONT, padding: "4px 8px", borderRadius: 5 }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = COLORS.surface2)}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-                  <Trash2 size={11} /> Clear
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Content — organized document flow: every band has a consistent
-          label, rhythm and gutter so the page reads as sections, not tiles. */}
-      <div ref={contentRef} style={{ flex: 1, overflowY: "auto", padding: "6px 32px 44px" }}>
-        <SectionLabel icon={null} text="Overview" delay={0} />
-
-        {/* ===== Hero stats — huge readable numerals over shimmering skeletons ===== */}
-        {!booted ? (
-          <div style={{ display: "flex", gap: 14, marginBottom: 26, flexWrap: "wrap" }}>
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} style={{
-                flex: "1 1 200px", minWidth: 190, height: 138,
-                background: "var(--ovio-surface)", border: `1px solid ${COLORS.border}`,
-                borderRadius: 22, padding: "18px 20px",
-                animation: `ovioRiseSoft 500ms cubic-bezier(.16,1,.3,1) ${i * 70}ms both`,
-              }}>
-                <Skeleton w="46%" h={11} r={5} />
-                <Skeleton w={100} h={36} r={9} style={{ marginTop: 12 }} />
-                <Skeleton w="58%" h={10} r={5} style={{ marginTop: 10 }} />
-              </div>
+          <div className="library-project-grid" data-tour="projects">
+            <ProjectCard
+              project={generalProject}
+              index={0}
+              general
+              onOpen={() => onNavigateToProject(GENERAL_PROJECT_ID, GENERAL_SUB_ID)}
+            />
+            {library.map((project, index) => (
+              <ProjectCard
+                key={project.id}
+                project={project}
+                index={index + 1}
+                onRename={onRenameProject}
+                onOpen={() => openProject(project)}
+              />
             ))}
           </div>
-        ) : (
-          <div style={{ display: "flex", gap: 14, marginBottom: 26, flexWrap: "wrap" }}>
-            <StatCard
-              label="Meetings"
-              value={allRecordings.length}
-              animate
-              sub={`across ${projects.filter((p) => p.id !== GENERAL_PROJECT_ID).length || "no"} project${projects.filter((p) => p.id !== GENERAL_PROJECT_ID).length === 1 ? "" : "s"}`}
-              sparkData={spark}
-              delay={0}
-              subtitle="Open the full meetings analysis"
-              onClick={() => setAnalytics({ kind: "meetings" })}
-            />
-            <StatCard
-              label="Time captured"
-              value={formatDurationHr(Math.round(totalDuration / 60))}
-              sub={`${formatDurationHr(Math.round(avgDuration / 60))} average per meeting`}
-              delay={70}
-              subtitle="Open the full duration analysis"
-              onClick={() => setAnalytics({ kind: "duration" })}
-            />
-            <StatCard
-              label="AI summaries"
-              value={recordingsWithAI}
-              animate
-              sub={`${allRecordings.length > 0 ? Math.round((recordingsWithAI / allRecordings.length) * 100) : 0}% of everything recorded`}
-              delay={140}
-              subtitle="Open the AI coverage analysis"
-              onClick={() => setAnalytics({ kind: "ai" })}
-            />
-            <StatCard
-              label="Transcript lines"
-              value={totalTranscriptLines.toLocaleString()}
-              animate
-              sub={`${allRecordings.length > 0 ? Math.round(totalTranscriptLines / allRecordings.length) : 0} lines per meeting`}
-              delay={210}
-              subtitle="Open the full transcript analysis"
-              onClick={() => setAnalytics({ kind: "transcripts" })}
-            />
-          </div>
-        )}
-
-        {/* ===== Activity — week strip + department bars, one quiet band ===== */}
-        <SectionLabel icon={<Activity size={12} />} text="Activity" delay={220} />
-        <div style={{ display: "flex", gap: 14, marginBottom: 30, flexWrap: "wrap", alignItems: "stretch" }}>
-          <div className="ovio-panel" style={{ flex: "1 1 380px", minWidth: 340, padding: "16px 18px", animation: "ovioRiseSoft 600ms cubic-bezier(.16,1,.3,1) 260ms both" }}>
-            <WeekStrip
-              recordings={allRecordings}
-              onOpen={() => setAnalytics({ kind: "year" })}
-            />
-          </div>
-          {durationByDept.length > 0 && (
-            <div
-              className="ovio-panel"
-              onClick={() => setAnalytics({ kind: "departments" })}
-              title="Open the full department analysis"
-              style={{ flex: "1 1 320px", minWidth: 300, padding: "16px 18px", cursor: "pointer", transition: "border-color 200ms ease, box-shadow 240ms ease", animation: "ovioRiseSoft 600ms cubic-bezier(.16,1,.3,1) 320ms both" }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(126,155,186,0.45)";  }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = COLORS.border; e.currentTarget.style.boxShadow = "none"; }}
-            >
-              <div style={{ fontSize: 12, fontWeight: 600, color: COLORS.textSecondary, marginBottom: 14, display: "flex", alignItems: "center", gap: 6 }}>
-                Duration by Department <span style={{ color: COLORS.textTertiary, fontWeight: 400 }}>(min)</span>
-                <div style={{ flex: 1 }} />
-                <span style={{ display: "flex", alignItems: "center", gap: 2, fontSize: 10.5, fontWeight: 700, color: COLORS.blueBright }}>All <ArrowUpRight size={11} /></span>
-              </div>
-              <BarVisualization data={durationByDept} />
+          {library.length === 0 && generalRecordings.length === 0 && (
+            <div style={{ color: COLORS.textTertiary, fontSize: 12.5, marginTop: 18 }}>
+              Start a recording to build your library.
             </div>
           )}
         </div>
-
-        {/* ===== Inbox — General Folder, pinned above Projects.
-            Distinct horizontal design: no subprojects, not deletable, expand
-            in place to reveal its recordings with per-recording transfer. ===== */}
-        <SectionLabel text="General Folder" delay={340} />
-        <div style={{ marginBottom: 30, animation: "ovioRiseSoft 600ms cubic-bezier(.16,1,.3,1) 380ms both" }}>
-          <div
-            onClick={() => setInboxOpen((o) => !o)}
-            className="ovio-hero-card"
-            style={{
-              display: "flex", alignItems: "center", gap: 14,
-              background: "var(--ovio-surface)",
-              border: `1px solid ${inboxOpen ? COLORS.borderStrong : COLORS.border}`,
-              boxShadow: "none",
-              borderRadius: 20, padding: "16px 18px", cursor: "pointer",
-              transition: "border-color 200ms ease, transform 240ms cubic-bezier(.16,1,.3,1)",
-            }}
-            onMouseEnter={(e) => { if (!inboxOpen) e.currentTarget.style.borderColor = COLORS.borderStrong; }}
-            onMouseLeave={(e) => { if (!inboxOpen) e.currentTarget.style.borderColor = COLORS.border; }}
-          >
-            <div style={{
-              width: 42, height: 42, borderRadius: 13, flexShrink: 0,
-              background: COLORS.surface2, border: `1px solid ${COLORS.border}`,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              
-            }}>
-              <Inbox size={19} color={COLORS.textSecondary} />
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 15, fontWeight: 700, color: COLORS.text, letterSpacing: -0.2 }}>General Folder</span>
-              </div>
-              <div style={{ fontSize: 11.5, color: COLORS.textTertiary, marginTop: 2 }}>
-                Everything you record from anywhere lands here — {generalRecs.length} recording{generalRecs.length === 1 ? "" : "s"}
-              </div>
-            </div>
-            <div style={{ textAlign: "right", flexShrink: 0 }}>
-              <div style={{ fontVariantNumeric: "tabular-nums", fontWeight: 600, fontSize: 13, color: COLORS.text }}>
-                {formatDurationHr(Math.round(generalRecs.reduce((s, r) => s + (r.duration || 0), 0) / 60))}
-              </div>
-              <div style={{ fontSize: 10, color: COLORS.textTertiary }}>total</div>
-            </div>
-            {expandedDept === GENERAL_PROJECT_ID || inboxOpen ? <ChevronDown size={15} color={COLORS.textTertiary} /> : <ChevronRight size={15} color={COLORS.textTertiary} />}
-          </div>
-
-          {/* Inbox recordings — expand in place */}
-          {inboxOpen && (
-            <div style={{
-              border: `1px solid ${COLORS.border}`, borderTop: "none",
-              borderRadius: "0 0 18px 18px", padding: "8px 10px 10px",
-              background: COLORS.surface,
-              animation: "ovioFadeUp 320ms cubic-bezier(.16,1,.3,1) both",
-            }}>
-              {generalRecs.length === 0 ? (
-                <div style={{ padding: "18px 12px", fontSize: 12.5, color: COLORS.textTertiary, textAlign: "center" }}>
-                  Nothing here yet — press the global shortcut in any app to capture your first thought.
-                </div>
-              ) : (
-                generalRecs.map((rec) => (
-                  <div key={rec.id}
-                    onClick={() => handleSelectMeeting(rec)}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 12, padding: "10px 8px",
-                      borderRadius: 10, cursor: "pointer", transition: "background 140ms ease",
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = COLORS.surface3)}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-                    <Disc size={14} color={COLORS.textSecondary} style={{ flexShrink: 0 }} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12.5, fontWeight: 500, color: COLORS.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rec.label}</div>
-                      <div style={{ fontSize: 10.5, color: COLORS.textTertiary }}>{formatDate(rec.createdAt)} · {formatTime(rec.duration || 0)} · {(rec.transcript || []).length} lines</div>
-                    </div>
-                    {rec.aiNotes && (
-                      <span style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 10.5, color: COLORS.blueBright, flexShrink: 0 }}>
-                        <Brain size={11} /> noted
-                      </span>
-                    )}
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setTransferFor({ recId: rec.id, fromSid: GENERAL_SUB_ID, fromLabel: "General Folder" }); }}
-                      title="Move to a project"
-                      style={{
-                        display: "flex", alignItems: "center", gap: 5, flexShrink: 0,
-                        border: `1px solid ${COLORS.borderStrong}`, background: "transparent",
-                        color: COLORS.blueBright, fontSize: 10.5, fontWeight: 600,
-                        borderRadius: 999, padding: "4px 10px", cursor: "pointer", fontFamily: FONT,
-                        transition: "border-color 160ms ease, background 160ms ease",
-                      }}
-                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = COLORS.borderStrong; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = COLORS.borderStrong; e.currentTarget.style.background = "transparent"; }}
-                    >
-                      <FolderInput size={11} /> Move
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* ===== Projects — the library. Fluid rows, staggered entrance. ===== */}
-        <SectionLabel icon={<Folder size={12} />} text="Projects" delay={420} />
-        <div style={{ marginBottom: 8, animation: "ovioRiseSoft 600ms cubic-bezier(.16,1,.3,1) 440ms both" }}>
-          {deptData.length === 0 ? (
-            <div className="ovio-panel" style={{ padding: "30px 18px", textAlign: "center", fontSize: 13, color: COLORS.textTertiary }}>
-              No projects yet. Create one from the recorder view.
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {deptData.map((dept, di) => (
-                <div key={dept.id} className="ovio-panel" style={{ overflow: "hidden", animation: `ovioRiseSoft 560ms cubic-bezier(.16,1,.3,1) ${480 + di * 60}ms both` }}>
-                  <div onClick={() => setExpandedDept(expandedDept === dept.id ? null : dept.id)}
-                    className="ovio-panel-row"
-                    style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", cursor: "pointer", borderRadius: "20px 20px 0 0" }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = COLORS.surface2)}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-                    {expandedDept === dept.id ? <ChevronDown size={14} color={COLORS.textTertiary} /> : <ChevronRight size={14} color={COLORS.textTertiary} />}
-                    <div style={{ width: 32, height: 32, borderRadius: 9, background: COLORS.surface2, border: `1px solid ${COLORS.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <div style={{ width: 8, height: 8, borderRadius: 999, background: COLORS.borderStrong, }} />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13.5, fontWeight: 600, color: COLORS.text }}>{dept.name}</div>
-                      <div style={{ fontSize: 11, color: COLORS.textTertiary, marginTop: 1 }}>
-                        {dept.subprojects.length} subproject{dept.subprojects.length === 1 ? "" : "s"} · {dept.meetingCount} meeting{dept.meetingCount === 1 ? "" : "s"}
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", gap: 16, fontSize: 12, color: COLORS.textSecondary, alignItems: "center" }}>
-                      <div style={{ textAlign: "right" }}>
-                        <div style={{ fontVariantNumeric: "tabular-nums", fontWeight: 500 }}>{formatDurationHr(Math.round(dept.totalDuration / 60))}</div>
-                        <div style={{ fontSize: 10, color: COLORS.textTertiary }}>duration</div>
-                      </div>
-                      <div style={{ textAlign: "right" }}>
-                        <div style={{ fontVariantNumeric: "tabular-nums", fontWeight: 500 }}>{dept.aiCount}/{dept.meetingCount}</div>
-                        <div style={{ fontSize: 10, color: COLORS.textTertiary }}>AI done</div>
-                      </div>
-                      <button onClick={(e) => { e.stopPropagation(); setAnalytics({ kind: "department", deptId: dept.id }); }}
-                        title={`Open the full analysis for ${dept.name}`}
-                        style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 26, height: 26, border: `1px solid ${COLORS.borderStrong}`, background: "transparent", color: COLORS.textSecondary, borderRadius: 7, cursor: "pointer", fontFamily: FONT }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = COLORS.surface3; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
-                        <ArrowUpRight size={13} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {expandedDept === dept.id && (
-                    <div style={{ borderTop: `1px solid ${COLORS.border}`, padding: "8px 0" }}>
-                      {dept.subprojects.length === 0 ? (
-                        <div style={{ padding: "16px 44px", fontSize: 12, color: COLORS.textTertiary }}>No subprojects yet.</div>
-                      ) : (
-                        dept.subprojects.map((sub) => {
-                          const subRecs = (recordingsBySub[sub.id] || []).slice().sort((a, b) => b.createdAt - a.createdAt);
-                          return (
-                            <div key={sub.id}>
-                              <div onClick={() => onNavigateToProject(dept.id, sub.id)}
-                                style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 16px 8px 44px", cursor: "pointer", fontSize: 12.5, color: COLORS.textSecondary, fontWeight: 500 }}
-                                onMouseEnter={(e) => (e.currentTarget.style.background = COLORS.surface3)}
-                                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-                                <span>{sub.name}</span>
-                                <span style={{ color: COLORS.textTertiary }}>·</span>
-                                <span style={{ color: COLORS.textTertiary, fontSize: 11 }}>{subRecs.length} recording{subRecs.length === 1 ? "" : "s"}</span>
-                                <div style={{ flex: 1 }} />
-                                <ChevronRight size={12} color={COLORS.textTertiary} />
-                              </div>
-                              {subRecs.slice(0, 3).map((rec) => (
-                                <MeetingRow key={rec.id} rec={rec} onSelect={handleSelectMeeting} />
-                              ))}
-                              {subRecs.length > 3 && (
-                                <div onClick={() => onNavigateToProject(dept.id, sub.id)}
-                                  style={{ padding: "6px 44px 6px 80px", fontSize: 11, color: COLORS.textSecondary, cursor: "pointer" }}>
-                                  View all {subRecs.length} recordings →
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-      </div>
-    </div>
-
-    {analytics && (
-      <AnalyticsOverlay
-        kind={analytics.kind}
-        deptId={analytics.deptId}
-        projects={projects}
-        recordingsBySub={recordingsBySub}
-        onClose={() => setAnalytics(null)}
-        onOpenMeeting={onSelectRecording}
-      />
-    )}
-
-    {/* Transfer popup + confirmation toast */}
-    <TransferModal
-      open={!!transferFor}
-      currentLabel={transferFor?.fromLabel || "General Folder"}
-      targets={moveTargets}
-      onClose={() => setTransferFor(null)}
-      onPick={(sid, name) => commitTransfer(transferFor?.recId, sid, name)}
-    />
-    {transferred && (
-      <div style={{
-        position: "fixed", bottom: 22, left: "50%", transform: "translateX(-50%)", zIndex: 400,
-        display: "flex", alignItems: "center", gap: 8,
-        background: COLORS.glass, border: `1px solid ${COLORS.glassBorder}`,
-        backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)",
-        color: COLORS.text, fontSize: 12.5, fontWeight: 600,
-        borderRadius: 999, padding: "9px 16px",
-        boxShadow: "0 12px 40px rgba(0,0,0,0.5)", fontFamily: FONT,
-        animation: "ovioToastIn 380ms cubic-bezier(.16,1,.3,1) both",
-      }}>
-        <Check size={13} color={COLORS.textSecondary} /> Moved to {transferred}
-      </div>
-    )}
+      </main>
     </>
   );
 }

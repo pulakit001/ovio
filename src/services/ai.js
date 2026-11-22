@@ -1,4 +1,4 @@
-import { groqChatWithRetry, buildNotesSystem, buildAiBehaviorBlock, GEMINI_CONTEXT_TOKENS } from "./geminiCore";
+import { groqChatWithRetry, buildNotesSystem, buildAiBehaviorBlock, GEMINI_CONTEXT_TOKENS, NOTES_FORMAT_RULES } from "./geminiCore";
 import { openrouterChatWithRetry } from "./openrouterCore";
 import { ollamaChatWithRetry } from "./ollama";
 
@@ -31,18 +31,18 @@ export async function completeWithFallback(groqKeys, openrouterKeys, messages, o
   };
 
   const tryCloud = async () => {
-    if (groqKeys && groqKeys.length > 0) {
-      try {
-        return await groqChatWithRetry(groqKeys, messages, opts);
-      } catch (err) {
-        errors.push(`Groq: ${err.message}`);
-      }
-    }
     if (openrouterKeys && openrouterKeys.length > 0) {
       try {
         return await openrouterChatWithRetry(openrouterKeys, messages, opts);
       } catch (err) {
         errors.push(`OpenRouter: ${err.message}`);
+      }
+    }
+    if (groqKeys && groqKeys.length > 0) {
+      try {
+        return await groqChatWithRetry(groqKeys, messages, opts);
+      } catch (err) {
+        errors.push(`Gemini: ${err.message}`);
       }
     }
     return null;
@@ -115,11 +115,11 @@ export async function generateNotes(keys, transcriptLines, onProgress = () => {}
     const result = await completeWithFallback(
       groqKeys,
       openrouterKeys,
-      [{ role: "user", content: `Here is the full meeting/lecture transcript:\n\n${transcriptText}` }],
+      [{ role: "user", content: `Here is the full meeting/lecture transcript. Write the complete, long, detailed notes for it.\n\n${transcriptText}` }],
       // timeoutMs applies to the local (Ollama) provider: generating full-length
       // notes on-device can take several minutes on larger models. With
       // streaming it acts as an inactivity timeout (reset on every token).
-      { system, maxTokens: 8192, temperature: 0.2, aiProvider, ollama, timeoutMs: isLocal ? 1800000 : 480000, onToken }
+      { system, maxTokens: NOTES_MAX_TOKENS, temperature: 0.3, aiProvider, ollama, timeoutMs: isLocal ? 1800000 : 480000, onToken }
     );
     onProgress({ stage: "done", part: 1, totalParts: 1, percent: 100 });
     return result;
@@ -153,6 +153,9 @@ const CONCURRENCY_CLOUD = 4;
 // for one call. Digests run ~12% of their input size, so with 80k-word parts
 // most transcripts never need a merge round; a many-hour lecture does.
 const REDUCE_GROUP = 6;
+// Output budgets: final notes are meant to be long. Ollama caps itself lower.
+const NOTES_MAX_TOKENS = 32000;
+const DIGEST_MAX_TOKENS = 8000;
 
 function countWords(text) {
   return (text || "").split(/\s+/).filter(Boolean).length;
@@ -244,7 +247,7 @@ async function generateNotesAgentPipeline(groqKeys, openrouterKeys, transcriptTe
       },
     ], {
       system: AGENT_SYSTEM,
-      maxTokens: 4000,
+      maxTokens: DIGEST_MAX_TOKENS,
       temperature: 0.2,
       aiProvider,
       ollama,
@@ -301,7 +304,7 @@ async function generateNotesAgentPipeline(groqKeys, openrouterKeys, transcriptTe
           },
         ], {
           system: AGENT_SYSTEM,
-          maxTokens: 4000,
+          maxTokens: DIGEST_MAX_TOKENS,
           temperature: 0.2,
           aiProvider,
           ollama,
@@ -344,7 +347,7 @@ async function generateNotesAgentPipeline(groqKeys, openrouterKeys, transcriptTe
         `than chronology. This must read as the single definitive, exhaustive set of ` +
         `notes for the whole session — comprehensive, not condensed.`,
     }],
-      { system, maxTokens: 8192, temperature: 0.2, aiProvider, ollama, timeoutMs: isLocal ? 1800000 : 480000, onToken: makeTokenProgress(onProgress, { stage: "writing", part: parts.length, totalParts: parts.length }, 92) }
+      { system, maxTokens: NOTES_MAX_TOKENS, temperature: 0.3, aiProvider, ollama, timeoutMs: isLocal ? 1800000 : 480000, onToken: makeTokenProgress(onProgress, { stage: "writing", part: parts.length, totalParts: parts.length }, 92) }
   );
   onProgress({ stage: "done", part: parts.length, totalParts: parts.length, percent: 100 });
   return result;
@@ -399,7 +402,7 @@ export async function generateFolderNotes(keys, sources, onProgress = () => {}) 
           `Create the ONE ultimate, deeply detailed master note from all of them.\n\n` +
           docs.map((d) => `===== RECORDING: "${d.title}" =====\n${d.body}`).join("\n\n"),
       }],
-      { system, maxTokens: 8192, temperature: 0.2, aiProvider, ollama, timeoutMs: isLocal ? 1800000 : 480000, onToken: makeTokenProgress(onProgress, { stage: "writing", part: 0, totalParts: 1 }, 15) }
+      { system, maxTokens: NOTES_MAX_TOKENS, temperature: 0.3, aiProvider, ollama, timeoutMs: isLocal ? 1800000 : 480000, onToken: makeTokenProgress(onProgress, { stage: "writing", part: 0, totalParts: 1 }, 15) }
     );
     onProgress({ stage: "done", part: 1, totalParts: 1, percent: 100 });
     return result;
@@ -441,7 +444,7 @@ export async function generateFolderNotes(keys, sources, onProgress = () => {}) 
       },
     ], {
       system: AGENT_SYSTEM,
-      maxTokens: 4000,
+      maxTokens: DIGEST_MAX_TOKENS,
       temperature: 0.2,
       aiProvider,
       ollama,
@@ -484,7 +487,7 @@ export async function generateFolderNotes(keys, sources, onProgress = () => {}) 
       },
     ], {
       system: AGENT_SYSTEM,
-      maxTokens: 4000,
+      maxTokens: DIGEST_MAX_TOKENS,
       temperature: 0.2,
       aiProvider,
       ollama,
@@ -544,7 +547,7 @@ export async function generateFolderNotes(keys, sources, onProgress = () => {}) 
         `themes rather than by recording or chronology. It must read as the single ` +
         `definitive, exhaustive knowledge base for this project — comprehensive, not condensed.`,
     }],
-    { system, maxTokens: 8192, temperature: 0.2, aiProvider, ollama, timeoutMs: isLocal ? 1800000 : 480000, onToken: makeTokenProgress(onProgress, { stage: "writing", part: 1, totalParts: 1 }, 92) }
+    { system, maxTokens: NOTES_MAX_TOKENS, temperature: 0.3, aiProvider, ollama, timeoutMs: isLocal ? 1800000 : 480000, onToken: makeTokenProgress(onProgress, { stage: "writing", part: 1, totalParts: 1 }, 92) }
   );
   onProgress({ stage: "done", part: 1, totalParts: 1, percent: 100 });
   return result;
@@ -575,7 +578,9 @@ STYLE RULES:
 - Organized by IDEAS and THEMES across the whole folder, never by recording order or time. Do not use timestamps.
 - Write in simple, everyday language: short sentences, no unexplained jargon. Expand every acronym and briefly explain every technical term the first time it appears.
 - NEVER write one giant wall of text — always break the content into headed sections and bullets as described above.
-- If information is absent, write "Not mentioned" rather than guessing.`;
+- If information is absent, write "Not mentioned" rather than guessing.
+
+${NOTES_FORMAT_RULES}`;
   const behaviorBlock = buildAiBehaviorBlock(behavior);
   return behaviorBlock ? `${base}\n\n${behaviorBlock}` : base;
 }
@@ -631,6 +636,119 @@ export function hasApiKey() {
   return true;
 }
 
+const ASK_STOPWORDS = new Set("a an the and or but of to in on at for from by with about into over is are was were be been am do does did have has had i me my we our you your it its this that these those what which who whom when where why how can could should would will shall may might must any all some every each tell give show list find please summarize summarise recap explain make get".split(" "));
+const DAY_MS = 86400000;
+
+function askTimeWindow(q, now) {
+  if (/\btoday\b/.test(q)) return now - DAY_MS;
+  if (/\byesterday\b/.test(q)) return now - 2 * DAY_MS;
+  if (/\b(this|past|last)\s+week\b/.test(q)) return now - 7 * DAY_MS;
+  if (/\b(this|past|last)\s+month\b/.test(q)) return now - 31 * DAY_MS;
+  return 0;
+}
+
+/**
+ * Answer a question across the whole library.
+ * recordings: [{ id, sid, pid, label, project, folder, createdAt, duration, aiNotes, transcript }]
+ * Returns { text, sources: [{ n, id, sid, pid, label, createdAt }] }.
+ */
+export async function askLibrary(keys, question, recordings) {
+  const { groqKeys, openrouterKeys, aiProvider, ollama } = keys;
+  const now = Date.now();
+  const q = String(question || "").toLowerCase();
+  const terms = [...new Set(q.split(/[^\p{L}\p{N}]+/u).filter((t) => t.length > 2 && !ASK_STOPWORDS.has(t)))];
+  const since = askTimeWindow(q, now);
+  const wantsLatest = /\b(latest|last|recent|newest|most recent)\b/.test(q);
+
+  const all = (recordings || []).slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const textOf = (r) => (r.transcript || []).map((l) => l?.text || "").join(" ");
+
+  const scored = all.map((r, rank) => {
+    const head = `${r.label || ""} ${r.project || ""} ${r.folder || ""}`.toLowerCase();
+    const body = `${r.aiNotes || ""} ${textOf(r)}`.toLowerCase();
+    let s = 0;
+    for (const t of terms) {
+      if (head.includes(t)) s += 6;
+      let idx = body.indexOf(t);
+      let hits = 0;
+      while (idx !== -1 && hits < 8) { hits += 1; idx = body.indexOf(t, idx + t.length); }
+      s += hits;
+    }
+    if (since && (r.createdAt || 0) >= since) s += 10;
+    if (wantsLatest) s += Math.max(0, 6 - rank * 2);
+    s += Math.max(0, 1 - rank * 0.05);
+    return { r, s };
+  });
+
+  let picked = scored
+    .filter(({ r }) => !since || (r.createdAt || 0) >= since)
+    .sort((a, b) => b.s - a.s)
+    .slice(0, 8)
+    .map(({ r }) => r);
+  if (picked.length === 0) picked = all.slice(0, 6);
+
+  const BUDGET = 48000;
+  const per = Math.floor(BUDGET / Math.max(1, picked.length));
+  const excerpt = (r) => {
+    const notes = String(r.aiNotes || "").trim();
+    const notesPart = notes ? notes.slice(0, Math.floor(per * 0.6)) : "";
+    const room = per - notesPart.length;
+    const text = textOf(r).replace(/\s+/g, " ").trim();
+    let tx = "";
+    if (text && room > 200) {
+      const lower = text.toLowerCase();
+      const hit = terms.map((t) => lower.indexOf(t)).filter((i) => i >= 0).sort((a, b) => a - b)[0];
+      const start = hit != null ? Math.max(0, hit - Math.floor(room / 3)) : 0;
+      tx = (start > 0 ? "…" : "") + text.slice(start, start + room) + (start + room < text.length ? "…" : "");
+    }
+    return { notesPart, tx };
+  };
+
+  const fmtDate = (ts) => (ts ? new Date(ts).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric", year: "numeric" }) : "unknown date");
+  const where = (r) => [r.project, r.folder].filter(Boolean).join(" / ") || "General Folder";
+
+  const index = all.slice(0, 200)
+    .map((r) => `- "${r.label || "Untitled recording"}" · ${where(r)} · ${fmtDate(r.createdAt)} · ${Math.round((r.duration || 0) / 60)} min${r.aiNotes ? " · has notes" : ""}`)
+    .join("\n");
+
+  const sources = picked.map((r, i) => ({ n: i + 1, id: r.id, sid: r.sid, pid: r.pid, label: r.label || "Untitled recording", createdAt: r.createdAt }));
+  const detail = picked.map((r, i) => {
+    const { notesPart, tx } = excerpt(r);
+    return `[${i + 1}] "${r.label || "Untitled recording"}" — ${where(r)} — ${fmtDate(r.createdAt)}
+NOTES:
+${notesPart || "(none)"}
+TRANSCRIPT EXCERPT:
+${tx || "(none)"}`;
+  }).join("\n\n");
+
+  const system = `You are Ovio's library assistant. The user records meetings, lectures and thoughts; you answer questions across ALL of their recordings.
+Today is ${fmtDate(now)}. The library holds ${all.length} recording${all.length === 1 ? "" : "s"}.
+
+RULES:
+- Use ONLY the library index and the numbered sources below. If the answer is not there, say so plainly and suggest what to record or search for.
+- Cite the numbered sources you rely on inline, like [1] or [2][3]. Never cite a number that is not listed.
+- Lead with the direct answer. Keep it tight: short paragraphs, and bullet lists only when there are genuinely several items.
+- Light markdown is fine (bold, bullets). No headings for short answers.
+
+LIBRARY INDEX (every recording, newest first):
+${index || "(empty)"}
+
+SOURCES:
+${detail || "(none)"}${
+    keys.aiBehavior?.customInstructions?.trim()
+      ? `\n\nUSER'S CUSTOM INSTRUCTIONS (follow exactly):\n${keys.aiBehavior.customInstructions.trim()}`
+      : ""
+  }`;
+
+  const result = await completeWithFallback(
+    groqKeys,
+    openrouterKeys,
+    [{ role: "user", content: question }],
+    { system, maxTokens: 1400, temperature: 0.3, aiProvider, ollama }
+  );
+  return { text: result.text, sources };
+}
+
 export function getModel() {
-  return "Groq GPT OSS 20B / OpenRouter fallback / Ollama (local)";
+  return "OpenRouter Ling 3.2 Flash / Gemini fallback / Ollama (local)";
 }

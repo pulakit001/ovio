@@ -251,9 +251,12 @@ function createWindow() {
     height: 900,
     minWidth: 900,
     minHeight: 600,
-    titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 16, y: 16 },
-    backgroundColor: loadSettings().theme === "light" ? "#F7F5F0" : "#050507",
+    // macOS gets the inset traffic lights; Windows/Linux keep their native
+    // frame (the app has no custom min/close buttons to fall back on).
+    ...(process.platform === "darwin"
+      ? { titleBarStyle: "hiddenInset", trafficLightPosition: { x: 16, y: 16 } }
+      : {}),
+    backgroundColor: loadSettings().theme === "dark" ? "#050507" : "#FAFAF8",
     show: false,
     icon: LOGO_PATH,
     webPreferences: {
@@ -689,6 +692,16 @@ app.whenReady().then(() => {
     version: app.getVersion(),
     electron: process.versions.electron,
     platform: process.platform,
+  }));
+  ipcMain.handle("app:userName", () => new Promise((resolve) => {
+    const fallback = () => {
+      try { return require("os").userInfo().username || ""; } catch { return ""; }
+    };
+    if (process.platform !== "darwin") return resolve(fallback());
+    require("child_process").execFile("id", ["-F"], { timeout: 1500 }, (err, stdout) => {
+      const full = !err && String(stdout || "").trim();
+      resolve(full || fallback());
+    });
   }));
   ipcMain.handle("update:openPage", (_e, url) => {
     if (typeof url === "string" && /^https:\/\/(github\.com|githubusercontent\.com)\//.test(url)) {

@@ -34,7 +34,7 @@ const ACTIONS = [
   { id: "act-settings", kind: "action", icon: "gear", title: "Open Settings", run: (nav) => nav.go("settings") },
 ];
 
-export default function CommandPalette({ open, onClose, projects, recordingsBySub, vaultBySub, nav }) {
+export default function CommandPalette({ open, onClose, projects, recordingsBySub, vaultBySub, nav, initialQuery = "" }) {
   const [query, setQuery] = useState("");
   const [sel, setSel] = useState(0);
   const inputRef = useRef(null);
@@ -42,11 +42,11 @@ export default function CommandPalette({ open, onClose, projects, recordingsBySu
 
   useEffect(() => {
     if (open) {
-      setQuery("");
+      setQuery(initialQuery || "");
       setSel(0);
       setTimeout(() => inputRef.current?.focus(), 30);
     }
-  }, [open]);
+  }, [open, initialQuery]);
 
   // ---- Build the searchable index -------------------------------------
   const results = useMemo(() => {

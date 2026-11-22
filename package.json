@@ -38,19 +38,48 @@
     "mac": {
       "icon": "build/icon",
       "category": "public.app-category.productivity",
-      "artifactName": "${productName}-mac.${ext}",
+      "artifactName": "${productName}-mac-${arch}.${ext}",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.inherit.plist",
-      "notarize": true
+      "notarize": true,
+      "target": [
+        { "target": "dmg", "arch": ["arm64", "x64"] },
+        { "target": "zip", "arch": ["arm64", "x64"] }
+      ]
     },
     "dmg": {
-      "artifactName": "${productName}-mac.${ext}",
+      "artifactName": "${productName}-mac-${arch}.${ext}",
       "writeUpdateInfo": false
     },
     "win": {
-      "icon": "logo.png"
+      "icon": "build/icon/icon_1024.png",
+      "artifactName": "Ovio-Setup.${ext}",
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Ovio",
+      "artifactName": "Ovio-Setup.${ext}"
+    },
+    "linux": {
+      "icon": "build/icons",
+      "category": "AudioVideo",
+      "artifactName": "${productName}-${arch}.${ext}",
+      "maintainer": "Pulakit Bararia <pulakit001@users.noreply.github.com>",
+      "synopsis": "Private, local-first transcription and AI notes",
+      "description": "Real-time transcription, AI notes and a searchable recording library. Local-first, private by default.",
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] },
+        { "target": "deb", "arch": ["x64"] }
+      ]
     },
     "directories": {
       "output": "release"

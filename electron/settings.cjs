@@ -12,6 +12,9 @@ const MASTER_KEY_FILE = () => path.join(app.getPath("userData"), "ovio.key");
 const AMBIENT_DEFAULT_CHORDS = ["CommandOrControl+Shift+Space", "Alt+Shift+Space"];
 
 const DEFAULT_SETTINGS = {
+  // Bumped when a default changes so existing settings files can migrate once
+  // without overriding choices made after that migration.
+  settingsVersion: 2,
   mode: "local",
   sttModel: "whisper-large-v3-turbo",
   localSttModel: "large",
@@ -20,6 +23,8 @@ const DEFAULT_SETTINGS = {
   parakeetDefaulted: false,
   onboardingComplete: false,
   onboardingSkipped: false,
+  userName: "",
+  tourComplete: false,
   groqKeys: [],
   openrouterKeys: [],
   activeProviders: {
@@ -35,9 +40,9 @@ const DEFAULT_SETTINGS = {
   // "full" = everything; "reduced" = transitions only, no loops/pulses;
   // "off" = instant switches, no motion at all.
   animations: "full",
-  // UI theme mode: "dark" (default) or "light". Splash + window background
+  // UI theme mode: "light" (default) or "dark". Splash + window background
   // read this too, so the very first frame matches the chosen mode.
-  theme: "dark",
+  theme: "light",
   // ---- AI behavior ----
   aiBehavior: {
     // Short custom instructions appended to every notes/chat prompt.
@@ -154,6 +159,14 @@ function writeSettings(settings) {
 function migrateParsed(parsed) {
   const out = { ...DEFAULT_SETTINGS, ...parsed };
   let migrated = false;
+  // v2: light is the default appearance. Old files inherited dark from the
+  // previous default, so flip them once. Later choices are respected because
+  // settingsVersion is now stamped.
+  if (!parsed.settingsVersion || parsed.settingsVersion < 2) {
+    if (!parsed.theme || parsed.theme === "dark") out.theme = "light";
+    out.settingsVersion = 2;
+    migrated = true;
+  }
   for (const field of ["groqKeys", "openrouterKeys"]) {
     out[field] = (out[field] || []).map((k) => {
       if (!k || typeof k !== "object") return k;

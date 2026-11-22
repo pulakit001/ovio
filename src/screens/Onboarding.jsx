@@ -1,269 +1,107 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Mic, Cloud, Cpu, Rocket, ArrowRight, ArrowLeft, Check, X,
-  Sparkles, MessageSquareText, Download, Keyboard, FolderInput,
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Cloud,
+  Cpu,
+  Download,
+  FolderInput,
+  Mic,
+  Sparkles,
 } from "lucide-react";
-import { verifyGroqKey, verifyOpenRouterKey } from "../services/verifyKeys";
-import { checkOllama, OLLAMA_DEFAULT_URL, OLLAMA_TOP_MODELS } from "../services/ollama";
-import { FONT, COLORS, GRADIENTS, PILL } from "../ui/theme";
+import { COLORS, CTA, FONT } from "../ui/theme";
 
-function genId() {
-  return Math.random().toString(36).slice(2, 10);
-}
+// Three steps, in the order a new person actually needs them:
+//   1. What should Ovio call you?
+//   2. Download the speech model so transcription works offline.
+//   3. A short guided tour of the app.
+// Cloud keys, Ollama and the rest of the settings live in Settings — setup
+// stays about getting one recording working, not configuring everything.
+
+const MODEL_CARDS = [
+  {
+    id: "parakeet",
+    title: "Parakeet v3",
+    desc: "Streams live as you speak",
+    size: "~2.5 GB",
+    recommended: true,
+  },
+  {
+    id: "large",
+    title: "Whisper Large v3",
+    desc: "Highest accuracy, transcribes in chunks",
+    size: "~3.1 GB",
+  },
+];
 
 const MODEL_LABELS = {
-  parakeet: "Parakeet-TDT v3",
+  parakeet: "Parakeet v3",
   large: "Whisper Large v3",
 };
 
-const MODEL_CARDS = [
-  { id: "parakeet", title: "Parakeet v3", desc: "Most accurate · streams live", size: "~2.5 GB", recommended: true },
-  { id: "large", title: "Large v3", desc: "Most accurate Whisper", size: "~3.1 GB" },
-];
-
-// Brand accent used for progress fills — flat solid color, Typeform-style
-// (deliberately no gradients anywhere in onboarding).
-
-// Onboarding motion — the dark cinematic vocabulary: steps rise from blur,
-// cards light their borders on hover, the hero orb breathes.
 const ONBOARDING_CSS = `
-@keyframes ovioStepIn { from { opacity: 0; transform: translateY(18px) scale(.985); filter: blur(5px); } to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); } }
-@keyframes ovioFadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes ovioPillIn { from { opacity: 0; transform: translateX(-120%) translateY(-50%); } to { opacity: 1; transform: translateX(0) translateY(-50%); } }
+@keyframes ovioStepIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes ovioFadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes ovioSpin { to { transform: rotate(360deg); } }
-@keyframes ovioPop { 0% { transform: scale(.3); opacity: 0; } 60% { transform: scale(1.18); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
-@keyframes ovioOrbFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
-@keyframes ovioOrbMorph { 0%, 100% { border-radius: 44% 56% 52% 48% / 48% 46% 54% 52%; } 33% { border-radius: 56% 44% 46% 54% / 52% 56% 44% 48%; } 66% { border-radius: 48% 52% 58% 42% / 44% 50% 50% 56%; } }
-.ovio-card { transition: border-color 200ms ease, background 200ms ease; }
-.ovio-card:hover { border-color: rgba(126,155,186,0.38); }
-@keyframes ovioRingPulse { 0% { transform: scale(1); opacity: .5; } 70% { transform: scale(1.42); opacity: 0; } 100% { transform: scale(1.42); opacity: 0; } }
-@keyframes ovioWave { 0%, 100% { transform: scaleY(.25); } 50% { transform: scaleY(1); } }
-@keyframes ovioSpringIn { 0% { opacity: 0; transform: translateY(22px) scale(.94); } 62% { opacity: 1; transform: translateY(-4px) scale(1.015); } 84% { transform: translateY(1.5px) scale(.998); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
-@keyframes ovioRecPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
-.ovio-ring { position: absolute; inset: 0; border: 2px solid rgba(126,155,186,0.35); border-radius: 24%; animation: ovioRingPulse 2.8s cubic-bezier(.16,1,.3,1) infinite; pointer-events: none; }
-.ovio-keycap { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 26px; padding: 0 8px; border-radius: 7px; background: var(--ovio-keycap-bg); border: 1px solid var(--ovio-border-strong); box-shadow: 0 2px 0 var(--ovio-border-strong); font-size: 12px; font-weight: 700; color: var(--ovio-text); letter-spacing: .3px; }
-/* Quiet scrollbar for the step column — the chunky default one read as a
-   broken progress bar in the mode step. */
-.ovio-steps::-webkit-scrollbar { width: 5px; }
-.ovio-steps::-webkit-scrollbar-thumb { background: rgba(130,142,168,0.28); border-radius: 3px; }
-.ovio-steps::-webkit-scrollbar-track { background: transparent; }
+@keyframes ovioPop { 0% { transform: scale(.4); opacity: 0; } 65% { transform: scale(1.12); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes ovioHandWave { 0%, 60%, 100% { transform: rotate(0deg); } 10% { transform: rotate(16deg); } 20% { transform: rotate(-8deg); } 30% { transform: rotate(14deg); } 40% { transform: rotate(-4deg); } 50% { transform: rotate(10deg); } }
+.ovio-hand { display: inline-block; transform-origin: 70% 75%; animation: ovioHandWave 2.4s ease-in-out 400ms infinite; }
+.ovio-name-input {
+  width: 100%; box-sizing: border-box; text-align: center; border: none; outline: none;
+  background: transparent; font-family: inherit; font-size: 30px; font-weight: 500;
+  letter-spacing: -0.03em; padding: 10px 4px 12px;
+  border-bottom: 2px solid var(--ovio-border-strong);
+  transition: border-color 200ms ease;
+}
+.ovio-name-input:focus { border-bottom-color: var(--ovio-text); }
+.ovio-name-input::placeholder { color: var(--ovio-text); opacity: 0.25; }
+.ovio-onb-card { transition: border-color 180ms ease, background 180ms ease; }
+.ovio-onb-card:hover { border-color: var(--ovio-border-strong); }
+@media (prefers-reduced-motion: reduce) {
+  .ovio-hand { animation: none; }
+  .ovio-onb * { animation: none !important; }
+}
 `;
 
-const inputStyle = {
-  flex: 1,
-  border: `1px solid ${COLORS.borderStrong}`,
-  outline: "none",
-  fontSize: 13,
-  fontFamily: FONT,
-  color: COLORS.text,
-  background: COLORS.surface,
-  borderRadius: 8,
-  padding: "10px 12px",
-};
-
-// Staggered entrance helper — each child rises 80ms after the previous one.
-// spring: overshooting variant for the bouncy walkthrough rows.
-const fade = (i, base = 0, spring = false) => ({
-  animation: `${spring ? "ovioSpringIn" : "ovioFadeUp"} ${spring ? 620 : 500}ms ${spring ? "cubic-bezier(.3,1.4,.4,1)" : "cubic-bezier(.22,1,.36,1)"} both`,
-  animationDelay: `${base + i * (spring ? 90 : 80)}ms`,
-});
-
-// Slim left-edge pill that tracks any active model download / Ollama pull so
-// the user always sees WHAT is downloading and WHAT percentage it reached,
-// on every step. On the download step it yields to the full progress card.
-function DownloadPill({ label, percent, hidden }) {
-  if (!label || hidden) return null;
-  const pct = Math.round((percent || 0) * 100);
-  return (
-    <div style={{
-      position: "fixed", left: 0, top: "50%", zIndex: 400, pointerEvents: "none",
-      animation: "ovioPillIn 450ms cubic-bezier(.22,1,.36,1) both",
-    }}>
-      <div style={{
-        display: "flex", alignItems: "center", gap: 9,
-        background: "rgba(17,18,22,0.92)", color: COLORS.text,
-        backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)",
-        border: "1px solid rgba(255,255,255,0.12)", borderTop: "none", borderLeft: "none",
-        borderRadius: "0 999px 999px 0", padding: "9px 14px 9px 13px",
-        boxShadow: "8px 10px 32px rgba(0,0,0,0.5)", minWidth: 210,
-      }}>
-        <span style={{
-          width: 12, height: 12, borderRadius: 999, flexShrink: 0,
-          border: `2px solid rgba(255,255,255,.2)`, borderTopColor: COLORS.blueBright,
-          animation: "ovioSpin .8s linear infinite",
-        }} />
-        <span style={{ fontSize: 11.5, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 132 }}>
-          {label}
-        </span>
-        <span style={{ fontSize: 11, fontVariantNumeric: "tabular-nums", color: COLORS.textSecondary, width: 32, textAlign: "right" }}>{pct}%</span>
-        <span style={{ position: "relative", width: 64, height: 4, borderRadius: 2, background: "rgba(255,255,255,.12)", overflow: "hidden" }}>
-          <span style={{
-            position: "absolute", left: 0, top: 0, bottom: 0,
-            width: `${pct}%`, borderRadius: 2,
-            background: COLORS.blueBright,
-            
-            transition: "width 300ms ease",
-          }} />
-        </span>
-      </div>
-    </div>
-  );
-}
-
-// A full-size physical keycap for the welcome hero. `pressed` sinks it —
-// driven by the REAL recording state, so when the user hits the chord the
-// keys visibly go down.
-function BigKeycap({ label, pressed }) {
-  const wide = label === "space" || label.length > 2;
-  return (
-    <span
-      style={{
-        display: "inline-flex", alignItems: "center", justifyContent: "center",
-        minWidth: wide ? 104 : 56, height: 56, padding: wide ? "0 20px" : "0 10px",
-        borderRadius: 13, background: COLORS.surface2,
-        border: `1px solid ${COLORS.borderStrong}`,
-        boxShadow: pressed
-          ? "inset 0 3px 9px rgba(0,0,0,0.30)"
-          : `0 4px 0 ${COLORS.borderStrong}, 0 12px 24px rgba(0,0,0,0.28)`,
-        transform: pressed ? "translateY(3px)" : "translateY(0)",
-        transition: "transform 110ms cubic-bezier(.3,.7,.4,1), box-shadow 110ms ease",
-        fontSize: wide ? 15 : 21, fontWeight: 600, letterSpacing: 0.4,
-        color: COLORS.text, fontFamily: FONT,
-        userSelect: "none", WebkitUserSelect: "none",
-      }}
-    >
-      {label}
-    </span>
-  );
-}
-
-// Live seconds since the current recording started (500ms tick, tabular so
-// digits never jitter).
-function LiveTimer({ startedAtMs }) {
-  const [, setTick] = useState(0);
+function useFirstName() {
+  const [name, setName] = useState("");
+  const touched = useRef(false);
   useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 500);
-    return () => clearInterval(id);
+    window.electronAPI?.userName?.()
+      .then((full) => {
+        const first = String(full || "").trim().split(/\s+/)[0] || "";
+        if (first && !touched.current) setName(first.charAt(0).toUpperCase() + first.slice(1));
+      })
+      .catch(() => {});
   }, []);
-  const s = Math.max(0, Math.floor((Date.now() - (startedAtMs || Date.now())) / 1000));
-  return <>{Math.floor(s / 60)}:{String(s % 60).padStart(2, "0")}</>;
+  return [name, setName, touched];
 }
 
-// --- Global-shortcut showcase (welcome step) -------------------------------
-
-const IS_MAC = (window.electronAPI?.platform || navigator.platform || "").toLowerCase().includes("mac");
-const KEY_GLYPHS = IS_MAC
-  ? { CommandOrControl: "⌘", Alt: "⌥", Shift: "⇧", Space: "space" }
-  : { CommandOrControl: "Ctrl", Alt: "Alt", Shift: "Shift", Space: "Space" };
-
-// "CommandOrControl+Shift+Space" → ["⌘", "⇧", "space"]
-const chordToKeys = (chord) =>
-  String(chord || "").split("+").filter(Boolean).map((k) => KEY_GLYPHS[k] || k);
-
-function Keycap({ label, accent }) {
-  return (
-    <span
-      className="ovio-keycap"
-      style={accent ? {
-        background: `${COLORS.blue}14`, borderColor: COLORS.blue,
-        color: COLORS.blue, boxShadow: `0 2px 0 ${COLORS.blue}`,
-      } : undefined}
-    >
-      {label}
-    </span>
-  );
-}
-
-// Renders one chord as physical-looking keycaps; the final key is accented.
-function ChordKeys({ chord }) {
-  const keys = chordToKeys(chord);
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
-      {keys.map((k, i) => (
-        <Keycap key={i} label={k} accent={i === keys.length - 1} />
-      ))}
-    </div>
-  );
-}
-
-// Gentle animated waveform — echoes the recorder without anything loud.
-function WaveBars({ count = 14 }) {
-  return (
-    <div style={{ display: "flex", alignItems: "flex-end", gap: 2, height: 22 }}>
-      {Array.from({ length: count }).map((_, i) => (
-        <span key={i} style={{
-          width: 3, height: "100%", borderRadius: 2, background: COLORS.blue,
-          opacity: 0.3, transformOrigin: "bottom",
-          animation: `ovioWave ${900 + (i % 5) * 170}ms ease-in-out ${i * 80}ms infinite`,
-        }} />
-      ))}
-    </div>
-  );
-}
-
-export default function Onboarding({ onComplete, onSkip, recStatus }) {
+export default function Onboarding({ onComplete, onSkip }) {
   const [step, setStep] = useState(0);
-  const [mode, setModeState] = useState("local");
+  const [name, setName, nameTouched] = useFirstName();
+  const firstName = name.trim();
+
   const [localModel, setLocalModel] = useState(
     window.electronAPI?.parakeetAPI ? "parakeet" : "large"
   );
-  const [aiProvider, setAiProvider] = useState("cloud");
-
-  // Cloud keys
-  const [groqKey, setGroqKey] = useState("");
-  const [groqStatus, setGroqStatus] = useState(null);
-  const [openrouterKey, setOpenrouterKey] = useState("");
-  const [orStatus, setOrStatus] = useState(null);
-  const [verifying, setVerifying] = useState(false);
-
-  // Ollama
-  const [ollamaUrl, setOllamaUrl] = useState(OLLAMA_DEFAULT_URL);
-  const [ollamaStatus, setOllamaStatus] = useState(null);
-  const [checkingOllama, setCheckingOllama] = useState(false);
-  // Curated 3-model picker: installed ids, per-model pull progress, selection.
-  const [ollamaInstalled, setOllamaInstalled] = useState([]);
-  const [ollamaPulls, setOllamaPulls] = useState({});
-  const [selectedOllamaModel, setSelectedOllamaModel] = useState("");
-  const ollamaUrlRef = useRef(ollamaUrl);
-  useEffect(() => { ollamaUrlRef.current = ollamaUrl; }, [ollamaUrl]);
-
-  // Local model downloads
   const [modelStates, setModelStates] = useState([]);
-  const downloadStartedRef = useRef(false);
-  const [bgDownload, setBgDownload] = useState(false);
-
-  // Chords actually registered by the main process (announced over IPC and
-  // replayed after the renderer's ready handshake) — the welcome screen shows
-  // the real shortcut, including any fallback the OS forced us onto.
-  const [shortcutInfo, setShortcutInfo] = useState(null);
-  useEffect(() => {
-    if (!window.electronAPI?.ambient?.onShortcut) return;
-    return window.electronAPI.ambient.onShortcut((info) => setShortcutInfo(info || null));
-  }, []);
-  const shortcutChords = shortcutInfo?.keys || [];
-
-  // Live truth for the welcome hero: the shortcut is real, so pressing it
-  // starts a real session (the recorder stays mounted behind onboarding) and
-  // the reported status sinks the keycaps and runs the timer.
-  const recording = !!recStatus?.isRecording;
-  const recStartedAtMs = recStatus?.startedAtMs || Date.now();
-  const primaryChord = shortcutChords.find((c) => !/CommandOrControl/.test(c)) || shortcutChords[0] || "";
-  const altChord = shortcutChords.find((c) => c !== primaryChord);
+  const [shortcut, setShortcut] = useState(null);
+  const startedFor = useRef(new Set());
 
   const hasDownloader = !!window.electronAPI?.downloadModel;
-  const isDownloadStep = mode !== "cloud" && hasDownloader;
-  const stepDefs = isDownloadStep
-    ? ["welcome", "mode", "ai", "download", "how", "done"]
-    : ["welcome", "mode", "ai", "how", "done"];
-  const stepId = stepDefs[step] || "welcome";
+  const modelCards = window.electronAPI?.parakeetAPI
+    ? MODEL_CARDS
+    : MODEL_CARDS.filter((model) => model.id !== "parakeet");
+  const stepDefs = hasDownloader ? ["name", "model", "done"] : ["name", "done"];
+  const stepId = stepDefs[step] || "name";
 
-  const refreshModels = async () => {
+  const refreshModels = useCallback(async () => {
     let states = [];
     if (window.electronAPI?.modelsStatus) {
       try { states = await window.electronAPI.modelsStatus(); } catch {}
     }
-    // Merge Parakeet's status into the same shape so the shared download
-    // progress UI works for it too.
     if (window.electronAPI?.parakeetAPI?.status) {
       try {
         const pk = await window.electronAPI.parakeetAPI.status();
@@ -275,808 +113,443 @@ export default function Onboarding({ onComplete, onSkip, recStatus }) {
             downloading: !!pk?.weights?.downloading,
             progress: pk?.weights?.progress || 0,
             engineReady: pk?.engine?.state === "ready",
+            engineInstalling: pk?.engine?.state === "installing",
           },
           ...states,
         ];
       } catch {}
     }
     setModelStates(states);
-  };
+  }, []);
 
-  useEffect(() => { refreshModels(); }, []);
+  useEffect(() => { refreshModels(); }, [refreshModels]);
 
   useEffect(() => {
-    if (!window.electronAPI?.onDownloadProgress) return;
+    if (!window.electronAPI?.onDownloadProgress) return undefined;
     const off = window.electronAPI.onDownloadProgress(() => refreshModels());
     return off;
-  }, []);
-  useEffect(() => {
-    if (!window.electronAPI?.parakeetAPI?.onStatus) return;
-    const off = window.electronAPI.parakeetAPI.onStatus(() => refreshModels());
-    return off;
-  }, []);
+  }, [refreshModels]);
 
-  // Ollama tags via the main process (works from any renderer origin).
-  const refreshOllama = useCallback(async (urlOverride) => {
-    const url = urlOverride ?? ollamaUrlRef.current;
-    const api = window.electronAPI?.ollamaAPI;
-    let res;
-    if (api?.tags) {
-      res = await api.tags(url);
-    } else {
-      res = await checkOllama(url); // graceful fallback (no preload / web build)
-    }
-    setOllamaStatus(res);
-    setOllamaInstalled(res?.ok ? (res.models || []).map((m) => m.id) : []);
-    return res;
+  useEffect(() => {
+    const api = window.electronAPI?.parakeetAPI;
+    if (!api?.onStatus) return undefined;
+    return api.onStatus(() => refreshModels());
+  }, [refreshModels]);
+
+  // The registered global shortcut, so the final step can name the real chord.
+  useEffect(() => {
+    if (!window.electronAPI?.ambient?.onShortcut) return undefined;
+    return window.electronAPI.ambient.onShortcut((info) => setShortcut(info || null));
   }, []);
 
-  // Probing Ollama as soon as the AI step shows the local provider — and
-  // whenever the user switches to it — so Ready/Pull states appear instantly.
-  useEffect(() => {
-    if (stepId === "ai" && aiProvider === "localOnly") {
-      setCheckingOllama(true);
-      refreshOllama().finally(() => setCheckingOllama(false));
-    }
-  }, [stepId, aiProvider, refreshOllama]);
+  const activeModel = modelStates.find((state) => state.id === localModel);
 
-  // Live pull progress for the curated Ollama models.
-  useEffect(() => {
-    const api = window.electronAPI?.ollamaAPI;
-    if (!api?.onPullProgress) return;
-    const off = api.onPullProgress((d) => {
-      if (!d?.model) return;
-      setOllamaPulls((prev) => ({
-        ...prev,
-        [d.model]: {
-          pulling: !d.done && !d.error,
-          percent: d.done ? 1 : d.percent || 0,
-          error: d.error || null,
-          ready: !!d.done,
-        },
-      }));
-      if (d.done) refreshOllama();
-    });
-    return off;
-  }, [refreshOllama]);
-
-  // Auto-select the best curated model that is actually installed.
-  useEffect(() => {
-    if (aiProvider !== "localOnly" || !ollamaStatus?.ok || !ollamaInstalled.length) return;
-    setSelectedOllamaModel((cur) => {
-      if (cur && ollamaInstalled.some((x) => x === cur || x.startsWith(cur))) return cur;
-      const best = OLLAMA_TOP_MODELS.find((m) =>
-        ollamaInstalled.some((x) => x === m.id || x.startsWith(m.id))
-      );
-      return best?.id || ollamaInstalled[0];
-    });
-  }, [ollamaStatus, ollamaInstalled, aiProvider]);
-
-  const pullOllama = (id) => {
-    const api = window.electronAPI?.ollamaAPI;
-    if (!api?.pull) return;
-    // Select the model being pulled so it is active the moment it lands.
-    setSelectedOllamaModel(id);
-    setOllamaPulls((prev) => ({
-      ...prev,
-      [id]: { pulling: true, percent: 0, error: null, ready: false },
-    }));
-    api
-      .pull(ollamaUrlRef.current, id)
-      .then((res) => {
-        if (res && res.ok === false) {
-          setOllamaPulls((prev) => ({
-            ...prev,
-            [id]: { pulling: false, percent: 0, error: res.error || "Pull failed", ready: false },
-          }));
-        }
-        return refreshOllama();
-      })
-      .catch(() => refreshOllama());
-  };
-
-  // Turn ON background download: as soon as the user picks a mode that uses
-  // the local model, the recommended model starts downloading in the
-  // background while they finish the rest of setup.
-  useEffect(() => {
-    if (!hasDownloader || mode === "cloud" || downloadStartedRef.current) return;
-    downloadStartedRef.current = true;
-    setBgDownload(true);
-    if (localModel === "parakeet") {
-      startParakeetProvisioning();
-      return;
-    }
-    refreshModels().then(() => {
-      window.electronAPI.modelsStatus().then((states) => {
-        const target = states.find((s) => s.id === localModel);
-        if (target && !target.downloaded) {
-          window.electronAPI.downloadModel(localModel).then(refreshModels).catch(refreshModels);
-        }
-      }).catch(() => {});
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode]);
-
-  // Parakeet needs its Python engine AND its weights — kick both off; they
-  // run fully in the background with progress surfaced in the download step.
-  const startParakeetProvisioning = () => {
+  const startParakeet = useCallback(() => {
     const api = window.electronAPI?.parakeetAPI;
     if (!api) return;
-    api.installEngine?.().then(refreshModels).catch((e) => console.warn("[ovio] parakeet engine:", e?.message));
-    api.downloadWeights?.().then(refreshModels).catch((e) => console.warn("[ovio] parakeet weights:", e?.message));
-  };
+    api.installEngine?.().then(refreshModels).catch(() => {});
+    api.downloadWeights?.().then(refreshModels).catch(() => {});
+  }, [refreshModels]);
 
-  const setMode = (m) => {
-    setModeState(m);
-    // Transcription mode is independent of the AI-notes provider: cloud STT
-    // with local Ollama notes (and vice versa) are both valid combos.
-  };
+  const startDownload = useCallback((id) => {
+    if (!hasDownloader) return;
+    if (startedFor.current.has(id)) return;
+    startedFor.current.add(id);
+    if (id === "parakeet") {
+      startParakeet();
+      return;
+    }
+    window.electronAPI.modelsStatus?.()
+      .then((states) => {
+        const target = (states || []).find((state) => state.id === id);
+        if (target && !target.downloaded && !target.downloading) {
+          return window.electronAPI.downloadModel(id);
+        }
+        return null;
+      })
+      .then(refreshModels)
+      .catch(refreshModels);
+  }, [hasDownloader, refreshModels, startParakeet]);
+
+  // Begin downloading as soon as the model step appears, and whenever the
+  // person picks a different model — "let's download the model so it works".
+  useEffect(() => {
+    if (stepId !== "model") return;
+    startDownload(localModel);
+  }, [stepId, localModel, startDownload]);
 
   const selectModel = (id) => {
     setLocalModel(id);
-    if (id === "parakeet") {
-      startParakeetProvisioning();
-      return;
-    }
-    const st = modelStates.find((s) => s.id === id);
-    if (st && !st.downloaded && !st.downloading && window.electronAPI?.downloadModel) {
-      window.electronAPI.downloadModel(id).then(refreshModels).catch(refreshModels);
-    }
+    startDownload(id);
   };
 
-  const handleVerifyGroq = async () => {
-    if (!groqKey.trim()) return;
-    setVerifying(true);
-    setGroqStatus(null);
-    setGroqStatus(await verifyGroqKey(groqKey.trim()));
-    setVerifying(false);
-  };
+  const canContinue = stepId !== "name" || firstName.length > 0;
 
-  const handleVerifyOr = async () => {
-    if (!openrouterKey.trim()) return;
-    setVerifying(true);
-    setOrStatus(null);
-    setOrStatus(await verifyOpenRouterKey(openrouterKey.trim()));
-    setVerifying(false);
+  const next = () => {
+    if (!canContinue) return;
+    setStep((current) => Math.min(current + 1, stepDefs.length - 1));
   };
-
-  const handleCheckOllama = async () => {
-    setCheckingOllama(true);
-    await refreshOllama();
-    setCheckingOllama(false);
-  };
-
-  const activeModel = modelStates.find((s) => s.id === localModel);
+  const back = () => setStep((current) => Math.max(current - 1, 0));
 
   const handleComplete = async () => {
-    const ollamaModelFinal =
-      aiProvider === "localOnly"
-        ? selectedOllamaModel &&
-          ollamaInstalled.some((x) => x === selectedOllamaModel || x.startsWith(selectedOllamaModel))
-          ? selectedOllamaModel
-          : ollamaStatus?.ok && ollamaStatus.models?.length
-            ? ollamaStatus.models[0].id
-            : ""
-        : "";
     const patch = {
-      mode,
-      localSttModel: mode === "cloud" ? "large" : localModel,
+      mode: "local",
+      localSttModel: localModel,
       sttModel: "whisper-large-v3-turbo",
-      aiProvider,
-      ollamaUrl,
-      ollamaModel: ollamaModelFinal,
       onboardingComplete: true,
       onboardingSkipped: false,
+      userName: firstName,
+      tourComplete: false,
     };
-    // Only overwrite keys when the user actually entered one — re-running
-    // setup must never wipe previously saved keys.
-    if (groqKey.trim()) patch.groqKeys = [{ id: genId(), name: "Primary", active: true, key: groqKey.trim() }];
-    if (openrouterKey.trim()) patch.openrouterKeys = [{ id: genId(), name: "Primary", active: true, key: openrouterKey.trim() }];
-    // Persist first (the app's onboarding gate reads the *saved* value), but
-    // bound the wait so a slow/stalled IPC can never leave "Get Started"
-    // feeling dead — we enter the app regardless after 4s.
     const flush = Promise.resolve(window.settingsAPI?.update(patch)).catch((err) => {
       console.warn("Onboarding settings save failed:", err?.message || err);
     });
-    await Promise.race([flush, new Promise((r) => setTimeout(r, 4000))]);
+    // Never let a stalled IPC leave "Start the tour" feeling dead.
+    await Promise.race([flush, new Promise((resolve) => setTimeout(resolve, 4000))]);
     onComplete();
   };
 
+  const handleSkip = async () => {
+    if (firstName) await window.settingsAPI?.update?.({ userName: firstName });
+    onSkip();
+  };
+
+  const downloading = !!activeModel?.downloading;
+  const downloaded = !!activeModel?.downloaded;
+  const percent = Math.round((activeModel?.progress || (downloaded ? 1 : 0)) * 100);
+
   const cardStyle = (selected) => ({
     flex: 1,
+    minWidth: 0,
     position: "relative",
     border: `1.5px solid ${selected ? COLORS.borderStrong : COLORS.border}`,
-    background: selected ? "rgba(255,255,255,0.045)" : COLORS.surface,
-    boxShadow: "none",
+    background: selected ? COLORS.selected : COLORS.surface,
     borderRadius: 16,
-    padding: "14px",
+    padding: 14,
     cursor: "pointer",
     textAlign: "left",
     fontFamily: FONT,
+    transition: "border-color 180ms ease, background 180ms ease",
   });
-
-  const sectionTitle = (text, sub) => (
-    <div>
-      <div style={{ fontSize: 16, fontWeight: 700, color: COLORS.text }}>{text}</div>
-      {sub && <div style={{ fontSize: 12, color: COLORS.textSecondary, marginTop: 2 }}>{sub}</div>}
-    </div>
-  );
-
-  // What is actively downloading right now (STT model or Ollama pull)?
-  const sttDownloading = modelStates.find((s) => s.downloading);
-  const ollamaPullingEntry = Object.entries(ollamaPulls).find(([, v]) => v.pulling);
-  const pill = sttDownloading
-    ? { label: `Downloading ${MODEL_LABELS[sttDownloading.id] || sttDownloading.id}`, percent: sttDownloading.progress || 0 }
-    : ollamaPullingEntry
-      ? { label: `Pulling Ollama ${ollamaPullingEntry[0]}`, percent: ollamaPullingEntry[1].percent }
-      : null;
-  // Collapsed download view: while a pull is active, ONLY that model is shown
-  // (enlarged, with a big progress bar). The full list returns when it finishes.
-  const activePullId = ollamaPullingEntry?.[0];
-  // On the download step the pill "merges" into the full progress card, so
-  // the pill steps aside while the card carries the progress.
-  const pillHidden = stepId === "download";
 
   return (
     <div style={{
       flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
-      background: GRADIENTS.pageGlow, fontFamily: FONT, position: "relative", overflow: "hidden",
+      background: COLORS.windowBg, fontFamily: FONT, position: "relative", overflow: "hidden",
     }}>
       <style>{ONBOARDING_CSS}</style>
 
-      {/* Progress bar — thin line at the very top */}
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "rgba(255,255,255,0.06)" }}>
+      {/* Progress — a thin line at the very top and quiet step dots. */}
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: COLORS.border }}>
         <div style={{
           height: "100%",
           width: `${((step + 1) / stepDefs.length) * 100}%`,
-          background: COLORS.blueBright,
-          
+          background: COLORS.accent,
           transition: "width 500ms cubic-bezier(.16,1,.3,1)",
         }} />
       </div>
-
-      {/* Step dots — bouncy morphing pills */}
-      <div style={{ position: "absolute", top: 18, left: 0, right: 0, display: "flex", justifyContent: "center", gap: 6 }}>
-        {stepDefs.map((s, i) => (
-          <div key={s} style={{
-            width: i === step ? 20 : 6, height: 6, borderRadius: 3,
-            background: i <= step ? COLORS.blueBright : "rgba(255,255,255,0.14)",
-            boxShadow: "none",
-            transform: i === step ? "scaleY(1.15)" : "scaleY(1)",
-            transition: "all 420ms cubic-bezier(.34,1.56,.64,1)",
+      <div style={{ position: "absolute", top: 20, left: 0, right: 0, display: "flex", justifyContent: "center", gap: 6 }}>
+        {stepDefs.map((id, index) => (
+          <div key={id} style={{
+            width: index === step ? 20 : 6, height: 6, borderRadius: 3,
+            background: index <= step ? COLORS.text : COLORS.borderStrong,
+            opacity: index <= step ? 1 : 0.5,
+            transition: "all 380ms cubic-bezier(.34,1.56,.64,1)",
           }} />
         ))}
       </div>
 
-      {/* Live download pill (left edge) */}
-      <DownloadPill label={pill?.label} percent={pill?.percent} hidden={pillHidden} />
+      {/* Step content — one open centered column, no card box around it. */}
+      <div className="ovio-onb" key={stepId} style={{
+        width: 600, maxWidth: "90%", maxHeight: "84vh", overflowY: "auto",
+        display: "flex", flexDirection: "column", gap: 20, alignItems: "center",
+        animation: "ovioStepIn 420ms cubic-bezier(.22,1,.36,1) both",
+        padding: "10px 0",
+      }}>
 
-      {/* Step content — Typeform-style: open centered column, no card box */}
-      <div className="ovio-steps" style={{
-        width: 560, maxWidth: "90%", maxHeight: "86vh", overflowY: "auto",
-        padding: "8px 0", display: "flex", flexDirection: "column", gap: 18, alignItems: "center",
-        animation: "ovioStepIn 450ms cubic-bezier(.22,1,.36,1) both",
-      }} key={step}>
-        {stepId === "welcome" && (
+        {stepId === "name" && (
           <>
-            <div style={{ textAlign: "center", paddingTop: 22, ...fade(0) }}>
+            <div style={{ textAlign: "center", paddingTop: 10, animation: "ovioFadeUp 480ms cubic-bezier(.22,1,.36,1) both" }}>
+              <div style={{ fontSize: 50, lineHeight: 1, marginBottom: 18 }}>
+                <span className="ovio-hand" role="img" aria-label="waving hand">👋</span>
+              </div>
               <div style={{
-                fontSize: 11, fontWeight: 700, letterSpacing: "0.32em",
-                color: COLORS.textTertiary, marginBottom: 16,
+                fontSize: 44, fontWeight: 500, letterSpacing: "-0.045em",
+                lineHeight: 1.06, color: COLORS.text,
               }}>
-                OVIO
+                Hi, I’m Ovio.
               </div>
-              <div style={{ fontSize: 42, fontWeight: 800, letterSpacing: -1.4, lineHeight: 1.08, color: COLORS.text }}>
-                Talk anywhere.
-              </div>
-              <div style={{ fontSize: 14.5, color: COLORS.textSecondary, marginTop: 12, lineHeight: 1.6, maxWidth: 420, marginLeft: "auto", marginRight: "auto" }}>
-                The fastest meeting recorder and automatic note-taker — private, on this Mac, and free.
+              <div style={{
+                fontSize: 15, color: COLORS.textSecondary, marginTop: 12,
+                lineHeight: 1.6, maxWidth: 430, marginLeft: "auto", marginRight: "auto",
+              }}>
+                I record, transcribe and take notes for you — privately, on this Mac.
+                First, what should I call you?
               </div>
             </div>
 
-            {/* Keep the hero calm: no card, no keys — just the promise and
-                the live state when a recording happens to be running. */}
-            {recording && (
-              <div
-                style={{
-                  ...fade(1),
-                  border: `1px solid ${COLORS.borderStrong}`,
-                  borderRadius: 20,
-                  background: COLORS.surface,
-                  padding: "22px 20px 20px",
-                  textAlign: "center",
-                }}
-              >
-                <div style={{
-                  fontSize: 10, fontWeight: 700, letterSpacing: "0.22em",
-                  color: COLORS.textTertiary, marginBottom: 12,
-                }}>LISTENING</div>
-                <div style={{
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-                  fontSize: 13, color: COLORS.textSecondary,
-                }}>
-                  <span style={{
-                    width: 7, height: 7, borderRadius: 999, background: COLORS.red,
-                    animation: "ovioRecPulse 1.4s ease-in-out infinite",
-                  }} />
-                  <span style={{ fontWeight: 600, color: COLORS.text, fontVariantNumeric: "tabular-nums" }}>
-                    <LiveTimer startedAtMs={recStartedAtMs} />
-                  </span>
-                  <WaveBars count={10} />
-                  <span style={{ color: COLORS.textTertiary }}>— hit ✓ on the bar to save</span>
-                </div>
+            <form
+              onSubmit={(event) => { event.preventDefault(); next(); }}
+              style={{ width: "100%", maxWidth: 370, animation: "ovioFadeUp 480ms 80ms cubic-bezier(.22,1,.36,1) both" }}
+            >
+              <input
+                className="ovio-name-input"
+                autoFocus
+                value={name}
+                maxLength={40}
+                onChange={(event) => { nameTouched.current = true; setName(event.target.value); }}
+                placeholder="Your first name"
+                aria-label="Your first name"
+                style={{ color: COLORS.text }}
+              />
+              <div style={{ fontSize: 11.5, color: COLORS.textTertiary, textAlign: "center", marginTop: 10 }}>
+                {firstName
+                  ? `Nice to meet you, ${firstName}. Press Enter to continue.`
+                  : "Only used to greet you. It never leaves this device."}
               </div>
-            )}
-
-            <div style={{ fontSize: 11.5, color: COLORS.textTertiary, textAlign: "center", ...fade(2) }}>
-              Takes about a minute. Everything is changeable later in Settings.
-            </div>
+            </form>
           </>
         )}
 
-        {stepId === "mode" && (
+        {stepId === "model" && (
           <>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, ...fade(0) }}>
-              <div style={{ width: 38, height: 38, borderRadius: 11, background: COLORS.surface2, border: `1px solid ${COLORS.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Mic size={18} color={COLORS.textSecondary} />
+            <div style={{ textAlign: "center", animation: "ovioFadeUp 480ms cubic-bezier(.22,1,.36,1) both" }}>
+              <div style={{
+                width: 52, height: 52, borderRadius: 16, margin: "0 auto 16px",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                background: COLORS.surface, border: `1px solid ${COLORS.border}`,
+              }}>
+                {downloaded ? <Check size={22} color={COLORS.text} /> : <Download size={22} color={COLORS.textSecondary} />}
               </div>
-              {sectionTitle("How should transcription run?", "You can change this anytime in Settings.")}
-            </div>
-            <div style={{ display: "flex", gap: 10 }}>
-              {[
-                { id: "local", title: "Local", desc: "On-device AI. Private, works offline." },
-                { id: "cloud", title: "Cloud", desc: "Gemini Whisper via Groq-compatible cloud. Fastest — needs a key." },
-              ].map((m, i) => (
-                <button key={m.id} onClick={() => setMode(m.id)} className="ovio-card"
-                  style={{ ...cardStyle(mode === m.id), ...fade(i + 1) }}>
-                  {mode === m.id && (
-                    <Check size={14} color={COLORS.textSecondary} style={{ position: "absolute", top: 10, right: 10 }} />
-                  )}
-                  <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>{m.title}</div>
-                  </div>
-                  <div style={{ fontSize: 11, color: COLORS.textSecondary, lineHeight: 1.5, marginTop: 4 }}>{m.desc}</div>
-                </button>
-              ))}
-            </div>
-
-            {mode !== "cloud" && hasDownloader && (
-              <>
-                <div style={{ fontSize: 12, fontWeight: 600, color: COLORS.textSecondary, ...fade(4) }}>
-                  Pick your on-device model
-                </div>
-                <div style={{ display: "flex", gap: 10 }}>
-                  {MODEL_CARDS.map((m, i) => {
-                    const st = modelStates.find((s) => s.id === m.id);
-                    return (
-                      <button key={m.id} onClick={() => selectModel(m.id)} className="ovio-card"
-                        style={{ ...cardStyle(localModel === m.id), ...fade(i + 5) }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                          <div style={{ fontSize: 12.5, fontWeight: 600, color: COLORS.text }}>{m.title}</div>
-                        </div>
-                        <div style={{ fontSize: 10.5, color: COLORS.textTertiary, margin: "3px 0" }}>{m.desc} · {m.size}</div>
-                        <div style={{
-                          fontSize: 10.5, fontWeight: 600,
-                          color: st?.downloading ? COLORS.blue : st?.downloaded ? COLORS.textSecondary : COLORS.textTertiary,
-                        }}>
-                          {st?.downloading ? `Downloading… ${Math.round((st.progress || 0) * 100)}%`
-                            : st?.downloaded ? "Ready" : "Will download now"}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-                {bgDownload && !activeModel?.downloaded && (
-                  <div style={{
-                    ...fade(7),
-                    display: "flex", alignItems: "center", gap: 8, fontSize: 11.5,
-                    color: COLORS.textSecondary,
-                    borderRadius: 8, padding: "8px 12px",
-                  }}>
-                    <Download size={13} />
-                    Downloading <strong style={{ fontWeight: 600 }}>{MODEL_LABELS[localModel]}</strong> in the background — keep going, we'll notify you when it's ready.
-                  </div>
-                )}
-              </>
-            )}
-          </>
-        )}
-
-        {stepId === "ai" && (
-          <>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, ...fade(0) }}>
-              {sectionTitle("Who writes your AI notes?", "Notes are generated automatically from every transcript.")}
-            </div>
-
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => setAiProvider("cloud")} className="ovio-card"
-                style={{ ...cardStyle(aiProvider === "cloud"), ...fade(1) }}>
-                {aiProvider === "cloud" && (
-                  <Check size={14} color={COLORS.textSecondary} style={{ position: "absolute", top: 10, right: 10 }} />
-                )}
-                <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>Cloud AI</div>
-                <div style={{ fontSize: 11, color: COLORS.textSecondary, lineHeight: 1.5, marginTop: 3 }}>Gemini + OpenRouter. Fast, generous free tier.</div>
-              </button>
-              <button onClick={() => setAiProvider("localOnly")} className="ovio-card"
-                style={{ ...cardStyle(aiProvider === "localOnly"), ...fade(2) }}>
-                {aiProvider === "localOnly" && (
-                  <Check size={14} color={COLORS.textSecondary} style={{ position: "absolute", top: 10, right: 10 }} />
-                )}
-                <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>Local (Ollama)</div>
-                <div style={{ fontSize: 11, color: COLORS.textSecondary, lineHeight: 1.5, marginTop: 3 }}>A model on this Mac. No keys, fully private.</div>
-              </button>
-            </div>
-
-            {aiProvider === "cloud" ? (
-              <>
-                <div style={{ display: "flex", gap: 8, ...fade(3) }}>
-                  <input value={groqKey} onChange={(e) => { setGroqKey(e.target.value); setGroqStatus(null); }}
-                    placeholder="Gemini key — AIza…  (aistudio.google.com/apikey)" style={inputStyle} />
-                  <button onClick={handleVerifyGroq} disabled={verifying || !groqKey.trim()}
-                    style={{
-                      border: `1px solid ${COLORS.borderStrong}`, background: verifying ? COLORS.surface2 : "transparent", color: verifying ? COLORS.textTertiary : COLORS.text,
-                      fontSize: 12, fontWeight: 600, borderRadius: 8, padding: "0 14px",
-                      cursor: verifying ? "default" : "pointer", fontFamily: FONT,
-                    }}>
-                    {verifying ? "…" : "Verify"}
-                  </button>
-                </div>
-                {groqStatus && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: groqStatus.ok ? COLORS.green : COLORS.red }}>
-                    {groqStatus.ok ? <Check size={14} /> : <X size={14} />}
-                    {groqStatus.ok ? "Groq connected" : groqStatus.error}
-                  </div>
-                )}
-                <div style={{ display: "flex", gap: 8, ...fade(4) }}>
-                  <input value={openrouterKey} onChange={(e) => { setOpenrouterKey(e.target.value); setOrStatus(null); }}
-                    placeholder="OpenRouter key (optional backup) — sk-or-v1-..." style={inputStyle} />
-                  <button onClick={handleVerifyOr} disabled={verifying || !openrouterKey.trim()}
-                    style={{
-                      border: `1px solid ${COLORS.borderStrong}`, background: verifying ? COLORS.surface2 : "transparent", color: verifying ? COLORS.textTertiary : COLORS.text,
-                      fontSize: 12, fontWeight: 600, borderRadius: 8, padding: "0 14px",
-                      cursor: verifying ? "default" : "pointer", fontFamily: FONT,
-                    }}>
-                    {verifying ? "…" : "Verify"}
-                  </button>
-                </div>
-                {orStatus && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: orStatus.ok ? COLORS.green : COLORS.red }}>
-                    {orStatus.ok ? <Check size={14} /> : <X size={14} />}
-                    {orStatus.ok ? "OpenRouter connected" : orStatus.error}
-                  </div>
-                )}
-                <div style={{ fontSize: 11.5, color: COLORS.textTertiary, ...fade(5) }}>
-                  Keys are stored encrypted on this device only. You can also skip and add them later.
-                </div>
-              </>
-            ) : (
-              <>
-                <div style={{ display: "flex", gap: 8, ...fade(3) }}>
-                  <input value={ollamaUrl} onChange={(e) => setOllamaUrl(e.target.value)}
-                    placeholder="http://localhost:11434" style={inputStyle} />
-                  <button onClick={handleCheckOllama} disabled={checkingOllama}
-                    style={{
-                      border: `1px solid ${COLORS.borderStrong}`, background: checkingOllama ? COLORS.surface2 : "transparent", color: checkingOllama ? COLORS.textTertiary : COLORS.text,
-                      fontSize: 12, fontWeight: 600, borderRadius: 8, padding: "0 14px",
-                      cursor: checkingOllama ? "default" : "pointer", fontFamily: FONT,
-                    }}>
-                    {checkingOllama ? "…" : "Check"}
-                  </button>
-                </div>
-                {ollamaStatus && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: ollamaStatus.ok ? COLORS.green : COLORS.red }}>
-                    {ollamaStatus.ok ? <Check size={14} /> : <X size={14} />}
-                    {ollamaStatus.ok
-                      ? `Connected — ${ollamaStatus.models.length} model${ollamaStatus.models.length === 1 ? "" : "s"} found`
-                      : ollamaStatus.error}
-                  </div>
-                )}
-
-                <div style={{ fontSize: 12, fontWeight: 600, color: COLORS.textSecondary, ...fade(4) }}>
-                  Pick a model for notes
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {OLLAMA_TOP_MODELS.filter((m) => !activePullId || activePullId === m.id).map((m, i) => {
-                    const isInstalled = ollamaInstalled.some((x) => x === m.id || x.startsWith(m.id));
-                    const pull = ollamaPulls[m.id];
-                    const isPulling = !!pull?.pulling;
-                    const pct = Math.round((pull?.percent || 0) * 100);
-                    const selected = selectedOllamaModel === m.id;
-                    // Collapsed download view — ONLY the model being pulled
-                    // shows, enlarged, with a big progress bar (percent + size).
-                    if (isPulling) {
-                      return (
-                        <div key={m.id} className="ovio-card"
-                          style={{
-                            ...fade(i + 5),
-                            border: `2px solid ${COLORS.blue}`,
-                            background: COLORS.surface,
-                            borderRadius: 12, padding: "18px 16px", flex: "none",
-                          }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                <span style={{ fontSize: 13.5, fontWeight: 700, color: COLORS.text }}>{m.title}</span>
-                                <span style={{ fontSize: 9.5, fontWeight: 700, color: COLORS.blue, background: `${COLORS.blue}14`, borderRadius: 4, padding: "1px 6px" }}>DOWNLOADING</span>
-                              </div>
-                              <div style={{ fontSize: 10.5, color: COLORS.textTertiary, marginTop: 2 }}>
-                                Fetching {m.size} from Ollama…
-                              </div>
-                            </div>
-                            <span style={{ fontSize: 16, fontWeight: 800, color: COLORS.blue, fontVariantNumeric: "tabular-nums" }}>{pct}%</span>
-                          </div>
-                          <div style={{ marginTop: 12, height: 8, borderRadius: 4, background: COLORS.border, overflow: "hidden" }}>
-                            <div style={{
-                              height: "100%", width: `${pct}%`,
-                              background: COLORS.accent, borderRadius: 4, transition: "width 300ms ease",
-                            }} />
-                          </div>
-                          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 10.5, color: COLORS.textTertiary }}>
-                            <span>{m.size} total</span>
-                            <span style={{ fontWeight: 700, color: COLORS.textSecondary }}>{pct}% downloaded</span>
-                          </div>
-                        </div>
-                      );
-                    }
-                    return (
-                      <div key={m.id}
-                        onClick={() => isInstalled && setSelectedOllamaModel(m.id)}
-                        className="ovio-card"
-                        style={{
-                          ...fade(i + 5),
-                          display: "flex", alignItems: "center", gap: 12,
-                          border: `2px solid ${selected ? COLORS.borderStrong : COLORS.border}`,
-                          background: selected ? "rgba(255,255,255,0.045)" : COLORS.surface,
-                          borderRadius: 12, padding: "12px 14px",
-                          cursor: isInstalled ? "pointer" : "default",
-                          flex: "none",
-                        }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ fontSize: 12.5, fontWeight: 700, color: COLORS.text }}>{m.title}</span>
-                          </div>
-                          <div style={{ fontSize: 10.5, color: COLORS.textTertiary, marginTop: 2 }}>{m.desc} · {m.size}</div>
-                        </div>
-                        {pull?.error ? (
-                          <span style={{ fontSize: 10, color: COLORS.red, maxWidth: 130, textAlign: "right", lineHeight: 1.4 }}>{pull.error}</span>
-                        ) : isInstalled ? (
-                          <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600, color: selected ? COLORS.text : COLORS.textTertiary }}>
-                            {selected ? (<>Selected <Check size={13} /></>) : "Ready"}
-                          </span>
-                        ) : (
-                          <button onClick={(e) => { e.stopPropagation(); pullOllama(m.id); }}
-                            disabled={!ollamaStatus?.ok || checkingOllama}
-                            style={{
-                              display: "flex", alignItems: "center", gap: 4,
-                              border: `1px solid ${COLORS.borderStrong}`,
-                              background: "transparent", color: COLORS.text,
-                              fontSize: 11, fontWeight: 700, borderRadius: 7, padding: "6px 12px",
-                              cursor: ollamaStatus?.ok ? "pointer" : "default", fontFamily: FONT,
-                              flexShrink: 0, opacity: ollamaStatus?.ok ? 1 : 0.4,
-                            }}>
-                            <Download size={12} /> Pull
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                <div style={{ fontSize: 11.5, color: COLORS.textTertiary, ...fade(8) }}>
-                  Requires <span style={{ fontFamily: "monospace" }}>ollama serve</span> running locally — missing models pull with one click.
-                </div>
-              </>
-            )}
-          </>
-        )}
-
-        {stepId === "download" && (
-          <>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, ...fade(0) }}>
-              {sectionTitle(
-                activeModel?.downloaded ? "Your model is ready" : `Getting ${MODEL_LABELS[localModel]} ready`,
-                "Runs entirely on this Mac — nothing leaves your device."
-              )}
-            </div>
-            <div style={{
-              ...fade(1),
-              border: `1px solid ${COLORS.border}`, borderRadius: 14, padding: 18,
-              background: COLORS.surface,
-            }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: COLORS.text }}>
-                  {MODEL_LABELS[localModel]} <span style={{ color: COLORS.textTertiary, fontWeight: 500 }}>· {activeModel?.sizeLabel || ""}</span>
-                </div>
-                <div style={{
-                  fontSize: 11.5, fontWeight: 700,
-                  color: activeModel?.downloaded ? COLORS.green : COLORS.blue,
-                }}>
-                  {activeModel?.downloaded ? "✓ Complete" : `${Math.round((activeModel?.progress || 0) * 100)}%`}
-                </div>
+              <div style={{
+                fontSize: 36, fontWeight: 500, letterSpacing: "-0.04em",
+                lineHeight: 1.1, color: COLORS.text,
+              }}>
+                {downloaded ? "Your model is ready." : "Let’s download your speech model."}
               </div>
-              <div style={{ height: 8, borderRadius: 4, background: COLORS.border, overflow: "hidden" }}>
-                <div style={{
-                  height: "100%",
-                  width: `${Math.round((activeModel?.progress || (activeModel?.downloaded ? 1 : 0)) * 100)}%`,
-                  background: activeModel?.downloaded ? COLORS.green : COLORS.accent,
-                  borderRadius: 4, transition: "width 400ms ease",
-                }} />
-              </div>
-              <div style={{ fontSize: 11.5, color: COLORS.textTertiary, marginTop: 10, lineHeight: 1.5 }}>
-                {activeModel?.downloaded
-                  ? "Transcription is ready to go fully offline."
-                  : activeModel?.downloading
-                    ? "Downloading in the background — you can continue setting up right now. We'll pop a notification when it's done."
-                    : "Download will start automatically."}
-                {localModel === "parakeet" && !activeModel?.engineReady && (
-                  <span> Also installing the local AI engine (one-time, ~5–15 min) — everything runs on this Mac.</span>
-                )}
+              <div style={{
+                fontSize: 14, color: COLORS.textSecondary, marginTop: 10,
+                lineHeight: 1.6, maxWidth: 460, marginLeft: "auto", marginRight: "auto",
+              }}>
+                {downloaded
+                  ? "Ovio can now transcribe fully offline. Nothing you say leaves this Mac."
+                  : "Ovio turns speech into text on this Mac, so it needs this model once. It downloads in the background — keep going."}
               </div>
             </div>
-            <div style={{ display: "flex", gap: 10 }}>
-              {MODEL_CARDS.map((m, i) => {
-                const st = modelStates.find((s) => s.id === m.id);
+
+            <div style={{ width: "100%", display: "flex", gap: 10, animation: "ovioFadeUp 480ms 80ms cubic-bezier(.22,1,.36,1) both" }}>
+              {modelCards.map((model) => {
+                const state = modelStates.find((entry) => entry.id === model.id);
+                const selected = localModel === model.id;
+                const ready = !!state?.downloaded;
                 return (
-                  <button key={m.id} onClick={() => selectModel(m.id)} className="ovio-card"
-                    style={{ ...cardStyle(localModel === m.id), ...fade(i + 2) }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 600, color: COLORS.text }}>{m.title}</div>
-                    <div style={{ fontSize: 10.5, color: st?.downloading ? COLORS.blue : st?.downloaded ? COLORS.green : COLORS.textTertiary, marginTop: 3 }}>
-                      {st?.downloading ? `${Math.round((st.progress || 0) * 100)}%`
-                        : st?.downloaded ? "✓ Ready" : m.size}
+                  <button
+                    key={model.id}
+                    type="button"
+                    onClick={() => selectModel(model.id)}
+                    className="ovio-onb-card"
+                    style={cardStyle(selected)}
+                  >
+                    {selected && <Check size={14} color={COLORS.text} style={{ position: "absolute", top: 11, right: 11 }} />}
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>{model.title}</span>
+                      {model.recommended && (
+                        <span style={{
+                          fontSize: 9.5, fontWeight: 700, letterSpacing: "0.04em",
+                          color: COLORS.textSecondary, background: COLORS.accentSoft,
+                          borderRadius: 999, padding: "2px 7px",
+                        }}>RECOMMENDED</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11, color: COLORS.textSecondary, lineHeight: 1.5, marginTop: 4 }}>
+                      {model.desc} · {model.size}
+                    </div>
+                    <div style={{
+                      fontSize: 10.5, fontWeight: 600, marginTop: 6,
+                      color: ready ? COLORS.text : state?.downloading ? COLORS.accent : COLORS.textTertiary,
+                    }}>
+                      {ready ? "Ready" : state?.downloading ? `Downloading… ${Math.round((state.progress || 0) * 100)}%` : "Will download now"}
                     </div>
                   </button>
                 );
               })}
             </div>
+
+            <div style={{
+              width: "100%", border: `1px solid ${COLORS.border}`, borderRadius: 16,
+              background: COLORS.surface, padding: 18,
+              animation: "ovioFadeUp 480ms 140ms cubic-bezier(.22,1,.36,1) both",
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, gap: 12 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>
+                  {MODEL_LABELS[localModel]}
+                  <span style={{ color: COLORS.textTertiary, fontWeight: 500 }}>
+                    {" "}· {activeModel?.sizeLabel || (localModel === "parakeet" ? "~2.5 GB" : "~3.1 GB")}
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: downloaded ? COLORS.text : COLORS.textSecondary, fontVariantNumeric: "tabular-nums" }}>
+                  {downloaded ? "✓ Complete" : downloading ? `${percent}%` : "Waiting"}
+                </div>
+              </div>
+              <div style={{ height: 8, borderRadius: 4, background: COLORS.border, overflow: "hidden" }}>
+                <div style={{
+                  height: "100%", width: `${downloaded ? 100 : percent}%`,
+                  background: COLORS.accent, borderRadius: 4,
+                  transition: "width 400ms ease",
+                }} />
+              </div>
+              <div style={{ fontSize: 11.5, color: COLORS.textTertiary, marginTop: 10, lineHeight: 1.5 }}>
+                {downloaded
+                  ? "Ready — local transcription is on."
+                  : downloading
+                    ? "Downloading in the background. You can continue setting up; we’ll let you know when it’s done."
+                    : "Starting the download…"}
+                {localModel === "parakeet" && !activeModel?.engineReady && (
+                  <span> The local AI engine also installs once (~5–15 min), entirely on this Mac.</span>
+                )}
+              </div>
+            </div>
           </>
         )}
 
-        {stepId === "how" && (
-          <div style={{ ...fade(0, 0, true) }}>
-            <div style={{ textAlign: "center", marginBottom: 20 }}>
-              <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: -0.9, color: COLORS.text }}>
-                Three moves. That’s <span style={{ color: COLORS.blueBright }}>it.</span>
-              </div>
-              <div style={{ fontSize: 13, color: COLORS.textSecondary, marginTop: 6 }}>
-                The whole app, in thirty seconds.
-              </div>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {[
-                {
-                  n: "1",
-                  title: "Summon it — anywhere",
-                  body: shortcutChords.length > 0
-                    ? "Press the shortcut inside any app. Ovio starts listening instantly — it never needs focus."
-                    : "Press your global shortcut inside any app. Ovio starts listening instantly.",
-                  art: shortcutChords.length > 0
-                    ? <div style={{ display: "flex", gap: 6, alignItems: "center" }}>{shortcutChords.slice(0, 2).map((c) => <ChordKeys key={c} chord={c} />)}</div>
-                    : null,
-                },
-                {
-                  n: "2",
-                  title: "Talk. Then close the popup.",
-                  body: "A small bar pops up near your menu bar. Speak, stop — the recording files itself into your Inbox and writes its own notes.",
-                  art: <WaveBars count={9} />,
-                },
-                {
-                  n: "3",
-                  title: "File it where it lives",
-                  body: "Open the Dashboard, hit Move on any recording, and slide it into the right project. Search, click, done.",
-                  art: null,
-                },
-              ].map((row, i) => (
-                <div key={i} {...fade(i + 1, 0, true)} className="ovio-card" style={{
-                  display: "flex", alignItems: "center", gap: 14,
-                  border: `1px solid ${COLORS.border}`, borderRadius: 16,
-                  background: COLORS.surface, padding: "14px 16px",
-                  position: "relative", overflow: "hidden",
-                }}>
-                  {/* giant ghost numeral — the step number as texture */}
-                  <span aria-hidden style={{
-                    position: "absolute", right: 6, top: -14, fontSize: 74, fontWeight: 800,
-                    letterSpacing: -4, color: COLORS.text, opacity: 0.045, pointerEvents: "none",
-                    fontFamily: FONT, lineHeight: 1,
-                  }}>{row.n}</span>                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 700, color: COLORS.text }}>
-                      <span style={{
-                        color: COLORS.blueBright, marginRight: 7,
-                        fontVariantNumeric: "tabular-nums",
-                      }}>{row.n}</span>{row.title}
-                    </div>
-                    <div style={{ fontSize: 11.5, color: COLORS.textSecondary, marginTop: 3, lineHeight: 1.55, maxWidth: 380 }}>
-                      {row.body}
-                    </div>
-                  </div>
-                  {row.art && <div style={{ flexShrink: 0, opacity: 0.85, padding: "0 4px" }}>{row.art}</div>}
-                </div>
-              ))}
+        {stepId === "done" && (
+          <div style={{ textAlign: "center", width: "100%", paddingTop: 8 }}>
+            <div style={{
+              width: 58, height: 58, borderRadius: 999, margin: "0 auto 18px",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              background: COLORS.accentSoft, border: `1px solid ${COLORS.border}`,
+              animation: "ovioPop 460ms cubic-bezier(.3,1.4,.4,1) both",
+            }}>
+              <Sparkles size={24} color={COLORS.text} />
             </div>
             <div style={{
-              ...fade(4), textAlign: "center",
-              marginTop: 14, fontSize: 11.5, color: COLORS.textTertiary,
+              fontSize: 34, fontWeight: 500, letterSpacing: "-0.04em",
+              color: COLORS.text, marginBottom: 9, lineHeight: 1.15,
             }}>
-              Everything else — summaries, filing, analytics — happens on its own.
+              You’re all set{firstName ? `, ${firstName}` : ""}.
             </div>
-          </div>
-        )}
+            <div style={{
+              fontSize: 14, color: COLORS.textSecondary, marginBottom: 22,
+              lineHeight: 1.6, maxWidth: 430, marginLeft: "auto", marginRight: "auto",
+            }}>
+              Next, a 30-second tour so you know where everything lives.
+            </div>
 
-        {stepId === "done" && (
-          <div style={{ textAlign: "center", padding: "16px 0", ...fade(0) }}>
-            <div style={{ fontSize: 20, fontWeight: 800, color: COLORS.text, marginBottom: 6 }}>You're all set.</div>
-            <div style={{ fontSize: 12.5, color: COLORS.textSecondary, marginBottom: 18 }}>
-              Create a project, hit record, and Ovio handles the rest.
-            </div>
             <div style={{
               display: "flex", flexDirection: "column", gap: 8, textAlign: "left",
-              border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: "14px 16px",
-              background: COLORS.surface,
+              border: `1px solid ${COLORS.border}`, borderRadius: 16,
+              padding: "14px 16px", background: COLORS.surface,
             }}>
               {[
                 {
-                  label: shortcutInfo?.shortLabel
-                    ? `Record anywhere with ${shortcutInfo.shortLabel}`
-                    : "Record anywhere with the global shortcut",
-                  state: "try it from any app",
-                },
-                {
-                  label: mode === "cloud" ? "Cloud transcription (Groq Whisper — unchanged)"
+                  icon: <Cpu size={14} color={COLORS.textSecondary} />,
+                  label: downloaded
+                    ? `Local transcription · ${MODEL_LABELS[localModel]}`
                     : `Local transcription · ${MODEL_LABELS[localModel]}`,
-                  state: mode !== "cloud" && !activeModel?.downloaded ? "downloading in background" : "",
+                  state: downloaded ? "Ready" : "Downloading in background",
                 },
                 {
-                  label: aiProvider === "localOnly" ? "AI notes via Ollama (local)" : "AI notes via Gemini / OpenRouter",
-                  state: aiProvider === "cloud" && !groqKey.trim() ? "add a key in Settings anytime" : "",
+                  icon: <Sparkles size={14} color={COLORS.textSecondary} />,
+                  label: "AI notes & library answers",
+                  state: "Add a key in Settings",
                 },
-              ].map((r, i) => (
-                <div key={i} style={{ ...fade(i + 1), display: "flex", alignItems: "center", gap: 9, fontSize: 12.5, color: COLORS.text }}>
-                  <span style={{ flex: 1 }}>{r.label}</span>
-                  {r.state && (
-                    <span style={{ fontSize: 10.5, color: COLORS.blue, fontWeight: 500 }}>({r.state})</span>
-                  )}
-                  {!r.state && <Check size={13} color={COLORS.green} />}
+                {
+                  icon: <Mic size={14} color={COLORS.textSecondary} />,
+                  label: shortcut?.shortLabel
+                    ? `Record anywhere with ${shortcut.shortLabel}`
+                    : "Record from anywhere with a global shortcut",
+                  state: "From any app",
+                },
+                {
+                  icon: <FolderInput size={14} color={COLORS.textSecondary} />,
+                  label: "Your recordings live in projects",
+                  state: "In the Recorder",
+                },
+              ].map((row) => (
+                <div key={row.label} style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 12.5, color: COLORS.text }}>
+                  <span style={{ display: "flex", flexShrink: 0 }}>{row.icon}</span>
+                  <span style={{ flex: 1, minWidth: 0 }}>{row.label}</span>
+                  <span style={{ fontSize: 10.5, color: COLORS.textTertiary, fontWeight: 500, whiteSpace: "nowrap" }}>
+                    {row.state}
+                  </span>
                 </div>
               ))}
+            </div>
+
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+              fontSize: 11.5, color: COLORS.textTertiary, marginTop: 16,
+            }}>
+              <Cloud size={12} /> Cloud keys and other preferences stay in Settings.
             </div>
           </div>
         )}
 
-        {/* Navigation — white pill CTA + springy Back, matching the app */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
-          <button onClick={onSkip} style={{
-            border: "none", background: "transparent", color: COLORS.textTertiary,
-            fontSize: 12, cursor: "pointer", fontFamily: FONT, padding: "6px 8px",
-            transition: "color 160ms ease",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = COLORS.textSecondary)}
-          onMouseLeave={(e) => (e.currentTarget.style.color = COLORS.textTertiary)}>
+        {/* Navigation */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", marginTop: 4 }}>
+          <button
+            onClick={handleSkip}
+            style={{
+              border: "none", background: "transparent", color: COLORS.textTertiary,
+              fontSize: 12, cursor: "pointer", fontFamily: FONT, padding: "6px 8px",
+              transition: "color 160ms ease",
+            }}
+            onMouseEnter={(event) => { event.currentTarget.style.color = COLORS.textSecondary; }}
+            onMouseLeave={(event) => { event.currentTarget.style.color = COLORS.textTertiary; }}
+          >
             Skip for now
           </button>
+
           <div style={{ display: "flex", gap: 8 }}>
             {step > 0 && (
-              <button onClick={() => setStep((s) => s - 1)} style={{
-                display: "flex", alignItems: "center", gap: 4, border: `1px solid ${COLORS.border}`,
-                background: "transparent", color: COLORS.textSecondary, fontSize: 12.5, fontWeight: 600,
-                borderRadius: 999, padding: "9px 16px", cursor: "pointer", fontFamily: FONT,
-                transition: "border-color 180ms ease, color 180ms ease",
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = COLORS.borderStrong; e.currentTarget.style.color = COLORS.text; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = COLORS.border; e.currentTarget.style.color = COLORS.textSecondary; }}>
+              <button
+                onClick={back}
+                style={{
+                  display: "flex", alignItems: "center", gap: 4, border: `1px solid ${COLORS.border}`,
+                  background: "transparent", color: COLORS.textSecondary, fontSize: 12.5, fontWeight: 600,
+                  borderRadius: 999, padding: "9px 16px", cursor: "pointer", fontFamily: FONT,
+                  transition: "border-color 180ms ease, color 180ms ease",
+                }}
+                onMouseEnter={(event) => {
+                  event.currentTarget.style.borderColor = COLORS.borderStrong;
+                  event.currentTarget.style.color = COLORS.text;
+                }}
+                onMouseLeave={(event) => {
+                  event.currentTarget.style.borderColor = COLORS.border;
+                  event.currentTarget.style.color = COLORS.textSecondary;
+                }}
+              >
                 <ArrowLeft size={13} /> Back
               </button>
             )}
-            {step < stepDefs.length - 1 ? (
-              <button onClick={() => setStep((s) => s + 1)} style={{
-                ...PILL.primary, fontSize: 12.5, padding: "9px 18px", fontFamily: FONT,
-                transition: "opacity 160ms ease",
-              }}>
-                {stepId === "download" && !activeModel?.downloaded ? "Continue in background" : "Next"}
+
+            {stepId !== "done" ? (
+              <button
+                onClick={next}
+                disabled={!canContinue}
+                style={{
+                  display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7,
+                  border: "none", borderRadius: 999, padding: "9px 18px",
+                  background: CTA.bg, color: CTA.fg, fontFamily: FONT,
+                  fontSize: 12.5, fontWeight: 600,
+                  cursor: canContinue ? "pointer" : "default",
+                  opacity: canContinue ? 1 : 0.4,
+                }}
+              >
+                {stepId === "model" && !downloaded ? "Continue in background" : "Next"}
                 <ArrowRight size={13} />
               </button>
             ) : (
-              <button onClick={handleComplete} style={{
-                ...PILL.primary, fontSize: 12.5, padding: "9px 18px", fontFamily: FONT,
-              }}>
-                Get Started <ArrowRight size={13} />
+              <button
+                onClick={handleComplete}
+                style={{
+                  display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7,
+                  border: "none", borderRadius: 999, padding: "10px 20px",
+                  background: CTA.bg, color: CTA.fg, fontFamily: FONT,
+                  fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                }}
+              >
+                Start the tour <ArrowRight size={13} />
               </button>
             )}
           </div>

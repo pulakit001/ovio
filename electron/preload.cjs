@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
   // Version/build info for Settings → About.
   appInfo: () => ipcRenderer.invoke("app:info"),
+  userName: () => ipcRenderer.invoke("app:userName"),
   transcribePcm: (chunk, model) => ipcRenderer.invoke("whisper:transcribe", chunk, model),
   whisperStatus: () => ipcRenderer.invoke("whisper:status"),
   modelsStatus: () => ipcRenderer.invoke("whisper:modelsStatus"),

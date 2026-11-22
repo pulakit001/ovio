@@ -1,19 +1,21 @@
 name: Release
 
-# Publishes the mac build to GitHub Releases.
+# Builds installers for macOS (arm64 + x64), Windows (x64) and Linux (x64)
+# and publishes them to a single GitHub Release.
 #
-# Two modes, automatic:
-#  - Secrets present (MAC_CSC_LINK + Apple creds) → build is Developer-ID
-#    signed AND notarized, then verified with a hard gate before upload.
-#    Users get NO Gatekeeper dialog.
-#  - No secrets → ad-hoc signed build is published as today. Users see the
-#    one-time "Apple could not verify" dialog and bypass via System Settings
-#    → Privacy & Security → Open Anyway (documented in README + the in-app
-#    updater popup). This stays honest: CI never CLAIMS notarization it
-#    didn't do.
+# macOS signing / notarization is automatic:
+#  - Secrets present (MAC_CSC_LINK + Apple creds) → Developer-ID signed AND
+#    notarized, then verified with a hard gate before upload. No Gatekeeper
+#    dialog for users.
+#  - No secrets → ad-hoc signed build. Users see the one-time "Apple could
+#    not verify" dialog and open via System Settings → Privacy & Security →
+#    Open Anyway (documented in the in-app updater popup).
 #
-# Single build → verify → upload with gh CLI (no second electron-builder run,
-# which would overwrite the signed app).
+# Windows builds are unsigned by default (SmartScreen shows a one-time
+# "Windows protected your PC" → More info → Run anyway). Add WIN_CSC_* secrets
+# to sign them and remove that prompt.
+#
+# Linux ships as AppImage (runs anywhere) + .deb (Debian/Ubuntu).
 
 on:
   push:
@@ -39,14 +41,9 @@ jobs:
         run: npm ci
 
       - name: Build renderer (vite)
-        # Without this the asar has no dist/ and the app opens as a blank
-        # screen — electron-builder packs whatever is on disk, so the vite
-        # build MUST run in the same job as packaging.
         run: npm run build
 
       - name: Build, sign (and notarize if secrets exist)
-        # GitHub sets missing secrets as EMPTY strings; electron-builder treats
-        # an empty CSC_LINK as a file path and fails. Unset the empties first.
         run: |
           [ -z "$CSC_LINK" ] && unset CSC_LINK || true
           [ -z "$CSC_KEY_PASSWORD" ] && unset CSC_KEY_PASSWORD || true
@@ -61,33 +58,107 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
-      - name: Smoke-check the packaged app
-        # Hard gate: the renderer must actually be inside the asar.
+      - name: Smoke-check the packaged apps
         run: |
-          APP="release/mac-arm64/Ovio.app"
-          npx --yes @electron/asar list "${APP}/Contents/Resources/app.asar" | grep -q "^/dist/index.html$" \
-            || { echo "✖ dist/index.html is NOT in the asar — the app would open blank."; exit 1; }
-          echo "✔ dist/index.html is packaged — renderer present."
+          for ARCH in arm64 x64; do
+            APP="release/mac-${ARCH}/Ovio.app"
+            npx --yes @electron/asar list "${APP}/Contents/Resources/app.asar" | grep -q "^/dist/index.html$" \
+              || { echo "✖ dist/index.html is NOT in ${APP} — the app would open blank."; exit 1; }
+            echo "✔ dist/index.html present in ${ARCH} build."
+          done
 
       - name: Verify signing (hard gate when a cert is configured)
-        # The gate needs to know whether a cert was SUPPOSED to be used. A
-        # secret's presence can't be tested in `if`, so detect it here.
         run: |
-          if [ -n "$CSC_LINK" ]; then
-            export REQUIRE_NOTARIZED=1
-          fi
+          if [ -n "$CSC_LINK" ]; then export REQUIRE_NOTARIZED=1; fi
           node scripts/verify-release-signing.cjs
         env:
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
 
-      - name: Upload artifacts to the release
+      - name: Upload macOS artifacts
         run: |
           TAG="${GITHUB_REF_NAME#v}"
           gh release view "v$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
             gh release create "v$TAG" --repo "$GITHUB_REPOSITORY" \
-              --title "Ovio v$TAG — for macOS" --generate-notes
-          gh release upload "v$TAG" \
-            release/Ovio-mac.dmg release/Ovio-mac.zip release/latest-mac.yml \
+              --title "Ovio v$TAG" --generate-notes
+          gh release upload "v$TAG" release/*.dmg release/*.zip release/*.blockmap \
+            --repo "$GITHUB_REPOSITORY" --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build renderer (vite)
+        run: npm run build
+
+      - name: Build Windows installer
+        run: npx electron-builder --win --publish never
+        env:
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+
+      - name: Smoke-check the packaged app
+        shell: bash
+        run: |
+          APP="release/win-unpacked/resources/app.asar"
+          npx --yes @electron/asar list "$APP" | grep -q "^/dist/index.html$" \
+            || { echo "✖ dist/index.html is NOT in the asar — the app would open blank."; exit 1; }
+          echo "✔ dist/index.html is packaged."
+
+      - name: Upload Windows artifacts
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          gh release view "v$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "v$TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "Ovio v$TAG" --generate-notes
+          gh release upload "v$TAG" release/*.exe --repo "$GITHUB_REPOSITORY" --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build renderer (vite)
+        run: npm run build
+
+      - name: Build Linux packages
+        run: npx electron-builder --linux --publish never
+
+      - name: Smoke-check the packaged app
+        run: |
+          APP="release/linux-unpacked/resources/app.asar"
+          npx --yes @electron/asar list "$APP" | grep -q "^/dist/index.html$" \
+            || { echo "✖ dist/index.html is NOT in the asar — the app would open blank."; exit 1; }
+          echo "✔ dist/index.html is packaged."
+
+      - name: Upload Linux artifacts
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          gh release view "v$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "v$TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "Ovio v$TAG" --generate-notes
+          gh release upload "v$TAG" release/*.AppImage release/*.deb \
             --repo "$GITHUB_REPOSITORY" --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

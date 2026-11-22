@@ -34,14 +34,30 @@ import {
 } from "lucide-react";
 import useTranscription from "../hooks/useTranscription";
 import useAutoNotes from "../hooks/useAutoNotes";
-import { askQuestion } from "../services/ai";
+import { askLibrary, askQuestion } from "../services/ai";
 import { useSettings } from "../context/SettingsContext";
 import { ANIM_CSS, rowIn, stepIn } from "../ui/anim";
-import { COLORS } from "../ui/theme"; // live theme object — follows dark/light swaps
+import { COLORS, CTA } from "../ui/theme"; // live theme object — follows dark/light swaps
 import TransferModal from "../components/TransferModal";
 
 const FONT =
   '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif';
+
+// Example questions shown when the chat is empty. The recording scope stays
+// close to the open transcript; the library scope mirrors the Dashboard's
+// cross-recording assistant.
+const RECORDING_PROMPTS = [
+  "Summarize this recording",
+  "List the action items",
+  "What was decided?",
+  "What questions are still open?",
+];
+const LIBRARY_PROMPTS = [
+  "Summarize my latest recording",
+  "What are my open action items?",
+  "What did I record this week?",
+  "What decisions were made recently?",
+];
 
 function formatTime(totalSeconds) {
   const m = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
@@ -231,7 +247,7 @@ function GeneratingPanel({ progress }) {
             style={{
               height: "100%",
               width: `${percent}%`,
-              background: `linear-gradient(90deg, ${COLORS.accent}, #7E9BBA)`,
+              background: `linear-gradient(90deg, ${COLORS.accent}, #C6F55F)`,
               borderRadius: 2,
               transition: "width 700ms cubic-bezier(0.22, 1, 0.36, 1)",
             }}
@@ -457,27 +473,93 @@ function parseMdTable(tableLines) {
   return { header: norm(header), rows: body.map(norm) };
 }
 
+const NOTE_TEXT = { fontSize: 13.5, lineHeight: 1.65 };
+const LIST_RE = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
+const HR_RE = /^(-{3,}|\*{3,}|_{3,})$/;
+
+function ListMarker({ item }) {
+  const box = { height: 22, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 };
+  if (item.task) {
+    return (
+      <span style={{ ...box, width: 16 }}>
+        <span style={{
+          width: 15, height: 15, borderRadius: 4,
+          border: `1.5px solid ${item.checked ? COLORS.accent : COLORS.borderStrong}`,
+          background: item.checked ? COLORS.accent : "transparent",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          {item.checked && <Check size={10} color="#0A0F02" strokeWidth={3} />}
+        </span>
+      </span>
+    );
+  }
+  if (item.ordered) {
+    return (
+      <span style={{ ...box, justifyContent: "flex-end", minWidth: 18, fontSize: 12.5, fontWeight: 650, color: COLORS.textTertiary, fontVariantNumeric: "tabular-nums" }}>
+        {item.num}.
+      </span>
+    );
+  }
+  const level = item.level % 3;
+  return (
+    <span style={{ ...box, width: 10 }}>
+      {level === 0 && <span style={{ width: 5, height: 5, borderRadius: 999, background: COLORS.textSecondary }} />}
+      {level === 1 && <span style={{ width: 5, height: 5, borderRadius: 999, border: `1.3px solid ${COLORS.textTertiary}` }} />}
+      {level === 2 && <span style={{ width: 6, height: 1.5, borderRadius: 1, background: COLORS.textTertiary }} />}
+    </span>
+  );
+}
+
 function renderAiNotesFormatted(aiNotes) {
   if (!aiNotes) return null;
-  const lines = aiNotes.split("\n");
+  const lines = aiNotes.replace(/\r\n/g, "\n").split("\n");
   const elements = [];
   let listItems = [];
   let tableLines = [];
+  let quoteLines = [];
 
   const flushList = () => {
-    if (listItems.length > 0) {
-      elements.push(
-        <div key={`list-${elements.length}`} style={{ display: "flex", flexDirection: "column", gap: 3, margin: "4px 0 8px" }}>
-          {listItems.map((item, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 6, fontSize: 13.5, lineHeight: 1.55, color: COLORS.text }}>
-              <span style={{ color: COLORS.textTertiary, marginTop: 1, flexShrink: 0 }}>•</span>
-              <span>{renderInlineMd(item)}</span>
-            </div>
-          ))}
+    if (listItems.length === 0) return;
+    const items = listItems;
+    listItems = [];
+    elements.push(
+      <div key={`list-${elements.length}`} style={{ display: "flex", flexDirection: "column", gap: 5, margin: "2px 0 14px" }}>
+        {items.map((item, i) => (
+          <div key={i} style={{
+            display: "flex", alignItems: "flex-start", gap: 9, ...NOTE_TEXT,
+            paddingLeft: item.level * 22,
+            color: item.level > 0 ? COLORS.textSecondary : COLORS.text,
+          }}>
+            <ListMarker item={item} />
+            <span style={{ minWidth: 0, flex: 1 }}>{renderInlineMd(item.text)}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const flushQuote = () => {
+    if (quoteLines.length === 0) return;
+    const text = quoteLines.join(" ");
+    quoteLines = [];
+    const isTldr = /^\*\*(tl;?dr|summary|in short)\b/i.test(text);
+    elements.push(
+      isTldr ? (
+        <div key={`q-${elements.length}`} style={{
+          ...NOTE_TEXT, color: COLORS.text, margin: "4px 0 20px", padding: "13px 16px",
+          background: COLORS.accentSoft, border: `1px solid ${COLORS.noteBorder}`, borderRadius: 12,
+        }}>
+          {renderInlineMd(text)}
         </div>
-      );
-      listItems = [];
-    }
+      ) : (
+        <div key={`q-${elements.length}`} style={{
+          ...NOTE_TEXT, color: COLORS.textSecondary, margin: "4px 0 14px", padding: "2px 0 2px 14px",
+          borderLeft: `2px solid ${COLORS.borderStrong}`,
+        }}>
+          {renderInlineMd(text)}
+        </div>
+      )
+    );
   };
 
   const flushTable = () => {
@@ -486,15 +568,15 @@ function renderAiNotesFormatted(aiNotes) {
     tableLines = [];
     if (!t || t.header.length === 0) return;
     elements.push(
-      <div key={`table-${elements.length}`} style={{ overflowX: "auto", margin: "6px 0 12px" }}>
+      <div key={`table-${elements.length}`} style={{ overflowX: "auto", margin: "6px 0 16px", border: `1px solid ${COLORS.border}`, borderRadius: 12 }}>
         <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5, fontFamily: FONT }}>
           <thead>
             <tr>
               {t.header.map((c, j) => (
                 <th key={j} style={{
-                  textAlign: "left", padding: "7px 10px", background: COLORS.sidebarBg,
-                  borderBottom: `2px solid ${COLORS.borderStrong}`, fontSize: 12,
-                  fontWeight: 700, color: COLORS.text,
+                  textAlign: "left", padding: "9px 12px", background: COLORS.surface2,
+                  borderBottom: `1px solid ${COLORS.borderStrong}`, fontSize: 12,
+                  fontWeight: 650, color: COLORS.text, whiteSpace: "nowrap",
                 }}>
                   {renderInlineMd(c)}
                 </th>
@@ -506,9 +588,9 @@ function renderAiNotesFormatted(aiNotes) {
               <tr key={ri}>
                 {r.map((c, j) => (
                   <td key={j} style={{
-                    padding: "7px 10px", borderBottom: `1px solid ${COLORS.border}`,
-                    background: ri % 2 === 1 ? COLORS.surface : "transparent",
-                    lineHeight: 1.5, color: COLORS.text, verticalAlign: "top",
+                    padding: "9px 12px",
+                    borderBottom: ri === t.rows.length - 1 ? "none" : `1px solid ${COLORS.border}`,
+                    lineHeight: 1.5, color: j === 0 ? COLORS.text : COLORS.textSecondary, verticalAlign: "top",
                   }}>
                     {renderInlineMd(c)}
                   </td>
@@ -521,93 +603,115 @@ function renderAiNotesFormatted(aiNotes) {
     );
   };
 
+  const flushAll = () => {
+    flushList();
+    flushQuote();
+    flushTable();
+  };
+
+  const nextNonEmpty = (from) => {
+    for (let j = from; j < lines.length; j++) if (lines[j].trim()) return lines[j].trim();
+    return "";
+  };
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const trimmed = line.trim();
 
-    // Markdown tables: consecutive lines starting with a pipe
     if (trimmed.startsWith("|")) {
       flushList();
+      flushQuote();
       tableLines.push(line);
       continue;
     }
     flushTable();
 
-    // Session title (# heading)
-    if (line.startsWith("# ")) {
+    if (trimmed.startsWith(">")) {
       flushList();
-      elements.push(
-        <div key={i} className="ai-notes-section" style={{
-          fontSize: 19, fontWeight: 800, color: COLORS.text, letterSpacing: -0.3,
-          marginTop: 2, marginBottom: 12,
-        }}>
-          {renderInlineMd(line.slice(2))}
-        </div>
-      );
+      quoteLines.push(trimmed.replace(/^>\s?/, ""));
+      continue;
+    }
+    flushQuote();
+
+    if (trimmed === "") {
+      // A blank line inside a list keeps the list together when it continues.
+      if (listItems.length && LIST_RE.test(lines[i + 1] || "")) continue;
+      flushList();
       continue;
     }
 
-    if (line.startsWith("## ")) {
+    if (HR_RE.test(trimmed)) {
       flushList();
-      elements.push(
-        <div key={i} className="ai-notes-section" style={{
-          fontSize: 15, fontWeight: 700, color: COLORS.text,
-          marginTop: i === 0 ? 0 : 20, marginBottom: 8,
-          paddingBottom: 6, borderBottom: `1px solid ${COLORS.border}`,
-        }}>
-          {renderInlineMd(line.slice(3))}
-        </div>
-      );
+      // Headings already carry their own rule — skip a divider right before one.
+      if (!/^#{1,2}\s/.test(nextNonEmpty(i + 1)) && elements.length) {
+        elements.push(<div key={i} style={{ height: 1, background: COLORS.border, margin: "18px 0" }} />);
+      }
       continue;
     }
 
-    if (line.startsWith("### ")) {
+    const heading = trimmed.match(/^(#{1,4})\s+(.*)$/);
+    if (heading) {
       flushList();
-      elements.push(
-        <div key={i} style={{ fontSize: 13.5, fontWeight: 600, color: COLORS.text, marginTop: 14, marginBottom: 4 }}>
-          {renderInlineMd(line.slice(4))}
-        </div>
-      );
+      const level = heading[1].length;
+      const text = renderInlineMd(heading[2].replace(/\s*#+\s*$/, ""));
+      const first = elements.length === 0;
+      if (level === 1) {
+        elements.push(
+          <div key={i} className="ai-notes-section" style={{
+            fontSize: 22, fontWeight: 750, color: COLORS.text, letterSpacing: "-0.02em",
+            lineHeight: 1.25, marginTop: first ? 0 : 24, marginBottom: 12,
+          }}>{text}</div>
+        );
+      } else if (level === 2) {
+        elements.push(
+          <div key={i} className="ai-notes-section" style={{
+            fontSize: 16, fontWeight: 700, color: COLORS.text, letterSpacing: "-0.01em",
+            marginTop: first ? 0 : 28, marginBottom: 10, paddingBottom: 8,
+            borderBottom: `1px solid ${COLORS.border}`,
+          }}>{text}</div>
+        );
+      } else if (level === 3) {
+        elements.push(
+          <div key={i} style={{ fontSize: 14.5, fontWeight: 650, color: COLORS.text, marginTop: first ? 0 : 18, marginBottom: 6 }}>{text}</div>
+        );
+      } else {
+        elements.push(
+          <div key={i} style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: COLORS.textSecondary, marginTop: 14, marginBottom: 6 }}>{text}</div>
+        );
+      }
       continue;
     }
 
-    const checkboxMatch = line.match(/^- \[([ x])\] (.+)$/);
-    if (checkboxMatch) {
-      flushList();
-      const checked = checkboxMatch[1] === "x";
-      elements.push(
-        <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 0", fontSize: 13.5, lineHeight: 1.5 }}>
-          <span style={{
-            width: 15, height: 15, borderRadius: 3, border: `1.5px solid ${checked ? COLORS.green : COLORS.borderStrong}`,
-            background: checked ? COLORS.green : "transparent",
-            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-          }}>
-            {checked && <Check size={10} color="#fff" />}
-          </span>
-          <span style={{ color: COLORS.text }}>{renderInlineMd(checkboxMatch[2])}</span>
-        </div>
-      );
+    const li = line.match(LIST_RE);
+    if (li) {
+      const indent = li[1].replace(/\t/g, "  ").length;
+      const ordered = /^\d/.test(li[2]);
+      const task = !ordered && li[3].match(/^\[([ xX])\]\s+(.*)$/);
+      listItems.push({
+        level: Math.min(3, Math.floor(indent / 2)),
+        ordered,
+        num: ordered ? parseInt(li[2], 10) : null,
+        task: !!task,
+        checked: task ? task[1].toLowerCase() === "x" : false,
+        text: task ? task[2] : li[3],
+      });
       continue;
     }
 
-    if (line.startsWith("- ")) {
-      listItems.push(line.slice(2));
+    // Indented continuation of the previous list item.
+    if (listItems.length && /^\s{2,}\S/.test(line)) {
+      listItems[listItems.length - 1].text += ` ${trimmed}`;
       continue;
     }
 
     flushList();
-    if (trimmed === "") {
-      continue;
-    }
-
     elements.push(
-      <div key={i} style={{ fontSize: 13.5, lineHeight: 1.6, color: COLORS.text, marginBottom: 2 }}>
-        {renderInlineMd(line)}
-      </div>
+      <p key={i} style={{ ...NOTE_TEXT, color: COLORS.text, margin: "0 0 12px" }}>
+        {renderInlineMd(trimmed)}
+      </p>
     );
   }
-  flushList();
-  flushTable();
+  flushAll();
   return elements;
 }
 
@@ -1062,7 +1166,7 @@ function FolderNotesView({
           <ArrowLeft size={13} /> Back to recordings
         </button>
         <button onClick={onRegenerate} disabled={isGenerating} style={{
-          display: "flex", alignItems: "center", gap: 6, border: "none", background: "#FFFFFF", color: "#0A0A0D",
+          display: "flex", alignItems: "center", gap: 6, border: "none", background: CTA.bg, color: CTA.fg,
           fontSize: 12.5, fontWeight: 500, borderRadius: 999, padding: "7px 14px",
           cursor: isGenerating ? "default" : "pointer", opacity: isGenerating ? 0.5 : 1,
         }}>
@@ -1121,6 +1225,9 @@ export default function MacNoteTaker({
   const [aiInput, setAiInput] = useState("");
   const [aiMessages, setAiMessages] = useState([]);
   const [aiLoading, setAiLoading] = useState(false);
+  // The chat can answer from the open recording or from the entire library.
+  // Both entry points share the same input; this only changes the scope.
+  const [askScope, setAskScope] = useState("recording");
   const [editingLabel, setEditingLabel] = useState(false);
   const [renamingItem, setRenamingItem] = useState(null); // { kind: "project"|"subproject"|"recording", pid, sid, id }
   const [hoveredId, setHoveredId] = useState(null);
@@ -1129,6 +1236,26 @@ export default function MacNoteTaker({
   // fixed "General Folder" so the user never has to pick a folder mid-work.
   const GENERAL_PROJECT_ID = "general-folder-project";
   const GENERAL_SUB_ID = "general-folder-sub";
+
+  // Flattened library for library-wide questions: every recording in every
+  // project/folder, tagged with where it lives so answers can cite sources.
+  const allRecordings = useMemo(() => {
+    const out = [];
+    for (const project of projects || []) {
+      for (const sub of project.subprojects || []) {
+        for (const rec of recordingsBySub?.[sub.id] || []) {
+          out.push({
+            ...rec,
+            sid: sub.id,
+            pid: project.id,
+            project: project.name,
+            folder: sub.name,
+          });
+        }
+      }
+    }
+    return out;
+  }, [projects, recordingsBySub]);
 
   // Move-to-folder for recordings: picker target, row flying out, sidebar
   // flash on the destination and the confirmation toast.
@@ -1189,11 +1316,27 @@ export default function MacNoteTaker({
           : "";
 
   useEffect(() => {
+    if (!navProjectId) return;
+    cameFromDashboardRef.current = true;
+    setSelectedProjectId(navProjectId);
+    setExpanded((prev) => ({ ...prev, [navProjectId]: true }));
     if (navSubprojectId) {
-      cameFromDashboardRef.current = true;
-      setSelectedProjectId(navProjectId);
       setSelectedSubprojectId(navSubprojectId);
+      return;
     }
+    // Project-level jump from a Dashboard card: open the drawer and land on
+    // the folder with the freshest recording so the stage shows real content.
+    const project = projects.find((p) => p.id === navProjectId);
+    const latestSub = (project?.subprojects || [])
+      .map((sub) => ({
+        id: sub.id,
+        at: (recordingsBySub[sub.id] || []).reduce((max, rec) => Math.max(max, rec.createdAt || 0), 0),
+      }))
+      .sort((a, b) => b.at - a.at)[0];
+    setSelectedSubprojectId(latestSub?.id ?? null);
+    // Only re-run when the requested destination changes; recordings/projects
+    // updates must not yank the user back to another folder.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navProjectId, navSubprojectId]);
 
   useEffect(() => {
@@ -1638,8 +1781,8 @@ export default function MacNoteTaker({
     URL.revokeObjectURL(url);
   };
 
-  const handleAskAI = useCallback(async () => {
-    const question = aiInput.trim();
+  const handleAskAI = useCallback(async (raw) => {
+    const question = (typeof raw === "string" ? raw : aiInput).trim();
     if (!question || aiLoading) return;
     setAiInput("");
     setAiOpen(true);
@@ -1670,8 +1813,23 @@ export default function MacNoteTaker({
       } catch {}
       // Send the recent conversation so follow-up questions keep their context.
       const history = aiMessages.slice(-8);
-      const text = await askQuestion(keys, transcript, aiNotes, question, history);
-      setAiMessages((prev) => [...prev, { role: "assistant", content: text || "(The assistant returned an empty response.)" }]);
+      let text;
+      let sources = [];
+      if (askScope === "library") {
+        // Same retrieval + citation engine the Dashboard uses — the answer
+        // spans every recording in the library, not just the open one.
+        const res = await askLibrary(keys, question, allRecordings);
+        text = res.text;
+        sources = res.sources || [];
+      } else {
+        text = await askQuestion(keys, transcript, aiNotes, question, history);
+      }
+      setAiMessages((prev) => [...prev, {
+        role: "assistant",
+        content: text || "(The assistant returned an empty response.)",
+        sources,
+        scope: askScope,
+      }]);
     } catch (err) {
       console.error("[ovio] AI chat failed:", err);
       const msg = (err && err.message) || "Something went wrong reaching the assistant.";
@@ -1679,7 +1837,7 @@ export default function MacNoteTaker({
     } finally {
       setAiLoading(false);
     }
-  }, [aiInput, aiLoading, aiMessages, transcript, aiNotes, settings, getActiveGroqKeys, getActiveOpenRouterKeys]);
+  }, [aiInput, aiLoading, aiMessages, transcript, aiNotes, settings, getActiveGroqKeys, getActiveOpenRouterKeys, askScope, allRecordings]);
 
   const addProject = (name) => {
     const id = genId();
@@ -1810,6 +1968,17 @@ export default function MacNoteTaker({
     setIsRecording(false);
     setActiveRecordingId(rec.id);
     setAutoScroll(true);
+  };
+
+  // Jump to a recording cited by a library-wide answer.
+  const openSource = (src) => {
+    const project = (projects || []).find((p) =>
+      (p.subprojects || []).some((s) => s.id === src?.sid)
+    );
+    const rec = (recordingsBySub?.[src?.sid] || []).find((r) => r.id === src?.id);
+    if (!project || !rec) return;
+    selectSubproject(project.id, src.sid);
+    openRecording(rec, false);
   };
 
   const createRecording = () => {
@@ -1986,7 +2155,7 @@ export default function MacNoteTaker({
       {/* Body */}
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
         {/* Sidebar — Finder-style source list */}
-        <div style={{ width: 240, minWidth: 240, display: "flex", flexDirection: "column", borderRight: `1px solid ${COLORS.border}`, background: COLORS.sidebarBg }}>
+        <div data-tour="recorder-sidebar" style={{ width: 240, minWidth: 240, display: "flex", flexDirection: "column", borderRight: `1px solid ${COLORS.border}`, background: COLORS.sidebarBg }}>
           <div style={{ flex: 1, overflowY: "auto", padding: "10px 8px" }}>
             {/* ===== General Folder — the pinned inbox. Distinct design:
                 no expand chevron, no subprojects, no rename/delete; a glowing
@@ -2014,7 +2183,7 @@ export default function MacNoteTaker({
                 >
                   <div style={{
                     width: 30, height: 30, borderRadius: 9, flexShrink: 0,
-                    background: COLORS.accentSoft, border: `1px solid rgba(86,120,154,0.4)`,
+                    background: COLORS.accentSoft, border: `1px solid rgba(198,245,95,0.4)`,
                     display: "flex", alignItems: "center", justifyContent: "center",
                   }}>
                     <Inbox size={15} color={COLORS.blueBright} />
@@ -2106,7 +2275,7 @@ export default function MacNoteTaker({
                                   background: selectedSubprojectId === s.id ? COLORS.borderStrong : "transparent",
                                   animation: flashSid === s.id && selectedSubprojectId !== s.id ? "ovioFlash 1.4s ease-out 0.25s" : undefined,
                                 }}
-                                onMouseEnter={(e) => { setHoveredId(s.id); if (selectedSubprojectId !== s.id) e.currentTarget.style.background = "rgba(255,255,255,0.1)"; }}
+                                onMouseEnter={(e) => { setHoveredId(s.id); if (selectedSubprojectId !== s.id) e.currentTarget.style.background = COLORS.selected; }}
                                 onMouseLeave={(e) => { setHoveredId(null); if (selectedSubprojectId !== s.id) e.currentTarget.style.background = "transparent"; }}
                               >
                                 <Disc size={13} color={selectedSubprojectId === s.id ? COLORS.text : COLORS.textTertiary} strokeWidth={1.8} />
@@ -2143,7 +2312,7 @@ export default function MacNoteTaker({
 
         {/* Main area */}
         {!selectedSubprojectId ? (
-          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.windowBg }}>
+          <div data-tour="recorder-stage" style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.windowBg }}>
             {noApiKey ? (
               <div style={{ ...stepIn(0), display: "flex", flexDirection: "column", alignItems: "center", gap: 10, textAlign: "center" }}>
                 <div style={{ width: 48, height: 48, borderRadius: 12, background: COLORS.surface2, border: `1px solid ${COLORS.border}`, display: "flex", alignItems: "center", justifyContent: "center", animation: "ovioFloat 3s ease-in-out infinite" }}>
@@ -2161,7 +2330,7 @@ export default function MacNoteTaker({
                 </div>
                 <button onClick={() => setCreatingProject(true)} style={{
                   display: "flex", alignItems: "center", gap: 6, marginTop: 6,
-                  background: "#FFFFFF", color: "#0A0A0D", border: "none", fontWeight: 600,
+                  background: CTA.bg, color: CTA.fg, border: "none", fontWeight: 600,
                   fontSize: 12.5, borderRadius: 999, padding: "8px 16px", cursor: "pointer",
                 }}>
                   <Plus size={14} /> New project
@@ -2223,9 +2392,9 @@ export default function MacNoteTaker({
                 >
                   <Layers size={13} /> Combine Notes
                 </button>
-                <button onClick={createRecording} title={ambientShortcutLabel ? `Tip: press ${ambientShortcutLabel} anywhere on your Mac to start an ambient recording` : undefined} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: "#FFFFFF", color: "#0A0A0D", fontSize: 12.5, fontWeight: 500, borderRadius: 999, padding: "7px 14px", cursor: "pointer", transition: "transform 120ms ease, background 160ms ease, box-shadow 200ms ease" }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = COLORS.blue; e.currentTarget.style.boxShadow = "0 4px 12px rgba(180,85,45,0.35)"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = COLORS.text; e.currentTarget.style.boxShadow = "none"; }}>
+                <button onClick={createRecording} title={ambientShortcutLabel ? `Tip: press ${ambientShortcutLabel} anywhere on your Mac to start an ambient recording` : undefined} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: CTA.bg, color: CTA.fg, fontSize: 12.5, fontWeight: 500, borderRadius: 999, padding: "7px 14px", cursor: "pointer", transition: "transform 120ms ease, background 160ms ease" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = CTA.bgHover; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = CTA.bg; }}>
                   <Mic size={13} /> New Recording
                 </button>
               </div>
@@ -2381,7 +2550,7 @@ export default function MacNoteTaker({
             {/* Right sidebar */}
             <div style={{ width: 400, minWidth: 400, display: "flex", flexDirection: "column", borderLeft: `1px solid ${COLORS.border}`, background: COLORS.sidebarBg, animation: "ovioSlideLeft 420ms cubic-bezier(.22,1,.36,1) both" }}>
               {/* Tabs */}
-              <div style={{ height: 48, minHeight: 48, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 10px 0 12px", borderBottom: `1px solid ${COLORS.border}`, animation: "ovioFadeDown 300ms ease both" }}>
+              <div data-tour="recorder-tabs" style={{ height: 48, minHeight: 48, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 10px 0 12px", borderBottom: `1px solid ${COLORS.border}`, animation: "ovioFadeDown 300ms ease both" }}>
                 <div ref={tabBarRef} style={{ display: "flex", gap: 2, position: "relative" }}>
                   <span style={{
                     position: "absolute", bottom: 0, height: 2, borderRadius: 2,
@@ -2510,41 +2679,113 @@ export default function MacNoteTaker({
                 )}
               </div>
 
-              {/* AI Chat */}
-              <div style={{ borderTop: `1px solid ${COLORS.border}`, marginTop: "auto" }}>
+              {/* AI Chat — answers from this recording or the whole library */}
+              <div data-tour="recorder-ask" style={{ borderTop: `1px solid ${COLORS.border}`, marginTop: "auto" }}>
                 {aiOpen && (
-                  <div style={{ maxHeight: 240, overflowY: "auto", padding: "12px 16px 4px", display: "flex", flexDirection: "column", gap: 10, animation: "ovioFadeUp 260ms cubic-bezier(.22,1,.36,1) both" }}>
+                  <div style={{ maxHeight: 260, overflowY: "auto", padding: "12px 16px 4px", display: "flex", flexDirection: "column", gap: 10, animation: "ovioFadeUp 260ms cubic-bezier(.22,1,.36,1) both" }}>
                     {aiMessages.length === 0 && !aiLoading && (
-                      <div style={{ fontSize: 12, color: COLORS.textTertiary, textAlign: "center", padding: "10px 0" }}>Ask anything about your recording</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "4px 0 6px" }}>
+                        <div style={{ fontSize: 12, color: COLORS.textTertiary, textAlign: "center" }}>
+                          {askScope === "library"
+                            ? `Ask across ${allRecordings.length} recording${allRecordings.length === 1 ? "" : "s"} in your library`
+                            : "Ask anything about this recording"}
+                        </div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, justifyContent: "center" }}>
+                          {(askScope === "library" ? LIBRARY_PROMPTS : RECORDING_PROMPTS).map((prompt) => (
+                            <button
+                              key={prompt}
+                              type="button"
+                              onClick={() => handleAskAI(prompt)}
+                              style={{
+                                border: `1px solid ${COLORS.border}`, background: COLORS.surface,
+                                color: COLORS.textSecondary, borderRadius: 999,
+                                padding: "5px 9px", fontSize: 11, fontFamily: FONT,
+                                cursor: "pointer", transition: "border-color 150ms ease, color 150ms ease",
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.borderColor = COLORS.borderStrong; e.currentTarget.style.color = COLORS.text; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.borderColor = COLORS.border; e.currentTarget.style.color = COLORS.textSecondary; }}
+                            >
+                              {prompt}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     )}
                     {aiMessages.map((m, i) => (
-                      <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
+                      <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: m.role === "user" ? "flex-end" : "flex-start", gap: 5 }}>
                         <div style={{
                           maxWidth: "85%", padding: "8px 12px", borderRadius: 12,
                           fontSize: 12.5, lineHeight: 1.5,
-                          // User bubbles: accent blue with white text (readable in
-                          // both themes). Bot bubbles: surface with normal text.
-                          // Was background+color both COLORS.text — white-on-white
-                          // in dark mode, black-on-black in light.
-                          background: m.role === "user" ? COLORS.blue : COLORS.surface2,
+                          // User bubbles use the neutral accent with inverted text;
+                          // bot bubbles sit on the surface with normal text.
+                          background: m.role === "user" ? COLORS.accent : COLORS.surface2,
                           border: m.role === "user" ? "none" : `1px solid ${COLORS.border}`,
-                          color: m.role === "user" ? "#FFFFFF" : COLORS.text,
+                          color: m.role === "user" ? "#0A0F02" : COLORS.text,
                           borderBottomRightRadius: m.role === "user" ? 4 : 12,
                           borderBottomLeftRadius: m.role === "user" ? 12 : 4,
                           whiteSpace: "pre-wrap",
                           animation: m.role === "user" ? "ovioChatInUser 260ms cubic-bezier(.22,1,.36,1) both" : "ovioChatInBot 300ms cubic-bezier(.22,1,.36,1) both",
                         }}>{m.content}</div>
+                        {m.role === "assistant" && m.sources?.length > 0 && (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, maxWidth: "85%" }}>
+                            {m.sources.slice(0, 6).map((src) => (
+                              <button
+                                key={`${src.id}-${src.n}`}
+                                type="button"
+                                onClick={() => openSource(src)}
+                                title={`Open "${src.label}"`}
+                                style={{
+                                  display: "inline-flex", alignItems: "center", gap: 5,
+                                  border: `1px solid ${COLORS.border}`, background: "transparent",
+                                  color: COLORS.textSecondary, borderRadius: 999,
+                                  padding: "3px 8px", fontSize: 10.5, fontFamily: FONT,
+                                  cursor: "pointer", maxWidth: 190,
+                                }}
+                              >
+                                <span style={{ color: COLORS.textTertiary, fontVariantNumeric: "tabular-nums" }}>{src.n}</span>
+                                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{src.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))}
                     {aiLoading && (
                       <div style={{ fontSize: 12, color: COLORS.textTertiary, padding: "6px 0", display: "flex", alignItems: "center", gap: 5 }}>
-                        Thinking
+                        {askScope === "library" ? `Reading ${allRecordings.length} recording${allRecordings.length === 1 ? "" : "s"}` : "Thinking"}
                         <span style={{ letterSpacing: 1 }}>
                           <span style={{ animation: "ovioDots 1.2s infinite" }}>.</span><span style={{ animation: "ovioDots 1.2s 0.2s infinite" }}>.</span><span style={{ animation: "ovioDots 1.2s 0.4s infinite" }}>.</span>
                         </span>
                       </div>
                     )}
                     <div ref={aiEndRef} />
+                  </div>
+                )}
+
+                {aiOpen && (
+                  <div style={{ display: "flex", gap: 3, padding: "0 12px 2px" }}>
+                    {[
+                      { id: "recording", label: "This recording" },
+                      { id: "library", label: `All recordings${allRecordings.length ? ` · ${allRecordings.length}` : ""}` },
+                    ].map((scope) => {
+                      const on = askScope === scope.id;
+                      return (
+                        <button
+                          key={scope.id}
+                          type="button"
+                          onClick={() => setAskScope(scope.id)}
+                          style={{
+                            border: "none", borderRadius: 6, padding: "4px 8px",
+                            background: on ? COLORS.accentSoft : "transparent",
+                            color: on ? COLORS.text : COLORS.textTertiary,
+                            fontSize: 10.5, fontWeight: on ? 650 : 500, fontFamily: FONT,
+                            cursor: "pointer", transition: "background 150ms ease, color 150ms ease",
+                          }}
+                        >
+                          {scope.label}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
 
@@ -2556,10 +2797,11 @@ export default function MacNoteTaker({
                     {aiOpen ? <X size={13} /> : <Sparkles size={13} />}
                   </button>
                   <input value={aiInput} onChange={(e) => setAiInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && aiInput.trim()) handleAskAI(); }}
-                    placeholder="Ask a question about this recording…"
+                    placeholder={askScope === "library" ? "Ask across all recordings…" : "Ask a question about this recording…"}
+                    aria-label={askScope === "library" ? "Ask across all recordings" : "Ask about this recording"}
                     style={{ flex: 1, border: "none", outline: "none", fontSize: 12.5, fontFamily: FONT, color: COLORS.text, background: "transparent", padding: "4px 0" }} />
                   <button onClick={handleAskAI} disabled={!aiInput.trim() || aiLoading}
-                    style={{ width: 28, height: 28, borderRadius: 999, border: "none", background: aiInput.trim() ? COLORS.blue : COLORS.border, color: COLORS.text, cursor: aiInput.trim() ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 150ms ease, transform 120ms ease" }}
+                    style={{ width: 28, height: 28, borderRadius: 999, border: "none", background: aiInput.trim() ? COLORS.accent : COLORS.border, color: aiInput.trim() ? "#0A0F02" : COLORS.textTertiary, cursor: aiInput.trim() ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 150ms ease, transform 120ms ease" }}
                     onMouseEnter={(e) => { if (aiInput.trim()) e.currentTarget.style.transform = "scale(1.1)"; }}
                     onMouseLeave={(e) => { e.currentTarget.style.transform = "scale(1)"; }}>
                     <Send size={12} />

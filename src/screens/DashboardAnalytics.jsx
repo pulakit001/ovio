@@ -15,13 +15,13 @@ import {
   PenLine,
   Activity,
 } from "lucide-react";
-import { COLORS as T, FONT as FONT_T } from "../ui/theme";
+import { COLORS as T, FONT as FONT_T, RADIUS } from "../ui/theme";
 
 const COLORS = T; // live theme tokens
 
 // Categorical chart palette — one hue, brightness ladder; light variant on paper.
-const DEPT_COLORS_DARK = ["#8AB0FF", "#5B93FF", "#56789A", "#2257DB", "#1A44AD", "#153483", "#10255C", "#0B1A3D"];
-const DEPT_COLORS_LIGHT = ["#56789A", "#2257DB", "#1A44AD", "#7E9BBA", "#7FA8FF", "#A9C4FF", "#153483", "#10255C"];
+const DEPT_COLORS_DARK = ["#C6F55F", "#A9D653", "#8CB645", "#6E9440", "#556F3D", "#3E4F35", "#2C382C", "#1C221D"];
+const DEPT_COLORS_LIGHT = ["#8FC22B", "#7BA82A", "#679028", "#547726", "#6E6E76", "#8B8B93", "#A5A5AC", "#C0C0C6"];
 const deptColors = () => (T.windowBg.startsWith("#F") ? DEPT_COLORS_LIGHT : DEPT_COLORS_DARK);
 
 const FONT = FONT_T;
@@ -323,7 +323,7 @@ export function YearHeatmap({ recordings, now }) {
         )}
         <div style={{ flex: 1 }} />
         <span style={{ color: COLORS.textTertiary, fontSize: 10.5 }}>less</span>
-        {[{ b: COLORS.surface2 }, { b: "rgba(86,120,154,0.4)" }, { b: "rgba(86,120,154,0.75)" }].map((x, i) => (
+        {[{ b: COLORS.surface2 }, { b: "rgba(198,245,95,0.4)" }, { b: "rgba(198,245,95,0.75)" }].map((x, i) => (
           <span key={i} style={{ width: cell - 3, height: cell - 3, borderRadius: 3, background: x.b }} />
         ))}
         <span style={{ color: COLORS.textTertiary, fontSize: 10.5 }}>more</span>
@@ -380,10 +380,10 @@ export function YearHeatmap({ recordings, now }) {
 // ---------------------------------------------------------------------------
 function SectionCard({ title, icon, subtitle, delay = 0, children, action }) {
   return (
-    <div style={{ ...stagger(delay), background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 14, padding: "18px 20px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+    <div style={{ ...stagger(delay), background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: RADIUS.panel, padding: "20px 22px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
         {icon}
-        <span style={{ fontSize: 12.5, fontWeight: 700, color: COLORS.text, letterSpacing: -0.2 }}>{title}</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: COLORS.text, letterSpacing: -0.2 }}>{title}</span>
         {subtitle && <span style={{ fontSize: 11, color: COLORS.textTertiary }}>{subtitle}</span>}
         <div style={{ flex: 1 }} />
         {action}
@@ -395,12 +395,12 @@ function SectionCard({ title, icon, subtitle, delay = 0, children, action }) {
 
 function MiniStat({ label, value, sub, delay, icon, accent }) {
   return (
-    <div style={{ ...stagger(delay), flex: 1, minWidth: 130, background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: "14px 16px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+    <div style={{ ...stagger(delay), flex: 1, minWidth: 130, background: COLORS.surface2, border: `1px solid ${COLORS.border}`, borderRadius: RADIUS.panel, padding: "16px 18px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
         {icon}
-        <span style={{ fontSize: 10.5, fontWeight: 600, color: COLORS.textTertiary, textTransform: "uppercase", letterSpacing: 0.4 }}>{label}</span>
+        <span style={{ fontSize: 10.5, fontWeight: 600, color: COLORS.textTertiary, textTransform: "uppercase", letterSpacing: "0.14em" }}>{label}</span>
       </div>
-      <div style={{ fontSize: 22, fontWeight: 700, color: accent || COLORS.text, letterSpacing: -0.4, fontVariantNumeric: "tabular-nums" }}>{value}</div>
+      <div style={{ fontSize: 24, fontWeight: 600, color: accent || COLORS.text, letterSpacing: "-0.04em", fontVariantNumeric: "tabular-nums" }}>{value}</div>
       {sub && <div style={{ fontSize: 10.5, color: COLORS.textTertiary, marginTop: 3 }}>{sub}</div>}
     </div>
   );
@@ -411,7 +411,7 @@ function MeetingRow({ rec, onSelect, deptLabel }) {
     <div onClick={onSelect ? () => onSelect(rec) : undefined}
       style={{
         display: "flex", alignItems: "center", gap: 12, padding: "11px 14px",
-        background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 10,
+        background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: RADIUS.tile,
         cursor: onSelect ? "pointer" : "default", transition: "border-color 150ms ease, transform 150ms ease",
       }}
       onMouseEnter={(e) => { e.currentTarget.style.borderColor = COLORS.borderStrong; e.currentTarget.style.background = COLORS.surface3; }}
@@ -431,8 +431,8 @@ function MeetingRow({ rec, onSelect, deptLabel }) {
         <span style={{ display: "flex", alignItems: "center", gap: 3, color: COLORS.textTertiary }}>{rec.transcript?.length || 0} lines</span>
         {(rec.notes || []).length > 0 && <span style={{ display: "flex", alignItems: "center", gap: 2, color: COLORS.textTertiary }}><PenLine size={9} /> {(rec.notes || []).length}</span>}
         {rec.aiNotes && (
-          <span style={{ width: 20, height: 20, borderRadius: 5, background: `${COLORS.blue}14`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Brain size={10} color={COLORS.blue} />
+          <span style={{ width: 20, height: 20, borderRadius: 6, background: COLORS.accentSoft, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Brain size={10} color={COLORS.accent} />
           </span>
         )}
       </div>
@@ -566,7 +566,7 @@ function MeetingsView({ recordings, depts, daily90, total, monthly, openMeeting 
         action={busiestDayIdx >= 0 ? <span style={{ fontSize: 11, color: COLORS.textTertiary }}>busiest: {daily90[busiestDayIdx]} on {fmtDate(new Date(Date.now() - (89 - busiestDayIdx) * DAY_MS), { weekday: "short", month: "short", day: "numeric" })}</span> : null}
       >
         <ChartBars items={daily90.map((v, i) => ({ label: i === 89 ? "today" : fmtDate(new Date(Date.now() - (89 - i) * DAY_MS), { weekday: "short" }), value: v }))}
-          height={120} color={(i) => (i === 89 ? COLORS.blue : "#1D2B66")} showValues={false} animKey="m90" />
+          height={120} color={(i) => (i === 89 ? COLORS.accent : COLORS.surface3)} showValues={false} animKey="m90" />
       </SectionCard>
 
       <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
@@ -580,7 +580,7 @@ function MeetingsView({ recordings, depts, daily90, total, monthly, openMeeting 
         </SectionCard>
 
         <SectionCard title="Trend" subtitle="last 12 months" delay={6} icon={<Calendar size={14} color={COLORS.blue} />}>
-          <ChartBars items={monthly.map((m) => ({ label: m.label, value: m.value }))} height={110} color="#1D2B66" animKey="m12" />
+          <ChartBars items={monthly.map((m) => ({ label: m.label, value: m.value }))} height={110} color={COLORS.surface3} animKey="m12" />
         </SectionCard>
       </div>
 
@@ -626,7 +626,7 @@ function DurationView({ recordings, depts, totalDur, longest, openMeeting }) {
       </SectionCard>
 
       <SectionCard title="Minutes per day" subtitle="last 30 days" delay={5} icon={<TrendingUp size={14} color={COLORS.blue} />}>
-        <ChartBars items={dailyBars} height={110} showValues unit="m" color={(i) => (i === 29 ? COLORS.blue : "#1D2B66")} animKey="d30" />
+        <ChartBars items={dailyBars} height={110} showValues unit="m" color={(i) => (i === 29 ? COLORS.accent : COLORS.surface3)} animKey="d30" />
       </SectionCard>
 
       {longest.length > 0 && (
@@ -762,7 +762,7 @@ function YearView({ recordings, depts, monthly }) {
 
       <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
         <SectionCard title="By month" subtitle="last 12 months" delay={4} icon={<TrendingUp size={14} color={COLORS.blue} />}>
-          <ChartBars items={monthly} height={120} showValues animKey="y12" color={(i, it) => (it.value > 0 ? COLORS.blue : "#1D2B66")} />
+          <ChartBars items={monthly} height={120} showValues animKey="y12" color={(i, it) => (it.value > 0 ? COLORS.blue : COLORS.surface3)} />
         </SectionCard>
         {activeDept.length > 0 && (
           <SectionCard title="Top departments" subtitle="by meetings" delay={5} icon={<Folder size={14} color={COLORS.blue} />}>
@@ -837,7 +837,7 @@ function DepartmentView({ dept, openMeeting }) {
 
       <SectionCard title="Activity" subtitle="meetings per day · last 90 days" delay={4} icon={<TrendingUp size={14} color={color} />}>
         <ChartBars items={daily.map((v, i) => ({ label: i === 89 ? "today" : fmtDate(new Date(Date.now() - (89 - i) * DAY_MS), { weekday: "short" }), value: v }))}
-          height={110} color={(i) => (i === 89 ? color : "#1D2B66")} animKey={`d${dept.id}`} />
+          height={110} color={(i) => (i === 89 ? color : COLORS.surface3)} animKey={`d${dept.id}`} />
       </SectionCard>
 
       {perSub.map((s, i) => (

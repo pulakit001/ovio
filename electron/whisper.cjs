@@ -1,7 +1,27 @@
 const path = require("path");
 const fs = require("fs");
 const { app, net } = require("electron");
-const { createWhisperContext, transcribeAsync } = require("whisper-cpp-node");
+
+// whisper.cpp ships prebuilt native addons only for macOS arm64 and Windows.
+// Requiring it eagerly used to crash the whole main process on Linux before a
+// window could open, so load it on first use and degrade to the Parakeet
+// sidecar / cloud STT when the platform has no addon.
+let whisperNative = null;
+let whisperNativeError = null;
+function loadWhisperNative() {
+  if (whisperNative) return whisperNative;
+  if (whisperNativeError) throw whisperNativeError;
+  try {
+    whisperNative = require("whisper-cpp-node");
+    return whisperNative;
+  } catch (err) {
+    whisperNativeError = new Error(
+      "Local Whisper isn't available on this platform — use the Parakeet engine or cloud transcription in Settings."
+    );
+    whisperNativeError.cause = err;
+    throw whisperNativeError;
+  }
+}
 
 const HF_BASE = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main";
 
@@ -88,7 +108,7 @@ function ensureContext(modelId) {
     try { ctx.free(); } catch {}
     ctx = null;
   }
-  ctx = createWhisperContext({
+  ctx = loadWhisperNative().createWhisperContext({
     model: p,
     use_gpu: true,
     no_prints: true,
@@ -115,7 +135,7 @@ async function transcribePcm(pcm, modelId, initialPrompt) {
     // Accuracy tuning: beam search + word-boundary splitting + greedy temp.
     // `initialPrompt` stays supported (bias the decoder toward specific
     // vocabulary) but nothing sets it now that voice profiling was removed.
-    const result = await transcribeAsync(c, {
+    const result = await loadWhisperNative().transcribeAsync(c, {
       pcmf32: pcm,
       initial_prompt: initialPrompt || undefined,
       language: "en",

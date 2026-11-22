@@ -1,10 +1,17 @@
 const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
 
 const MODEL_PRIORITY = [
-  { id: "nvidia/nemotron-3-ultra-free", context: 1_000_000, maxOutput: 32768 },
-  { id: "google/gemma-4-31b-it:free", context: 256_000, maxOutput: 32768 },
-  { id: "nvidia/nemotron-3-super-free", context: 262_000, maxOutput: 32768 },
+  { id: "inclusionai/ling-3.2-flash:free", label: "Ling 3.2 Flash", context: 1_048_576, maxOutput: 262_144 },
 ];
+
+// Strip reasoning blocks and a wrapping ```markdown fence some models emit.
+function cleanOutput(text) {
+  return (text || "")
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .trim()
+    .replace(/^```(?:markdown|md)?\s*\n([\s\S]*?)\n```$/i, "$1")
+    .trim();
+}
 
 // Transient failures worth retrying: rate limits, overload, timeouts, network drops.
 const RETRYABLE_STATUS = new Set([408, 409, 429, 500, 502, 503, 504]);
@@ -72,7 +79,10 @@ async function openrouterChat(apiKey, messages, { system, maxTokens = 4096, temp
   }
 
   const data = await res.json();
-  return data.choices?.[0]?.message?.content || "";
+  if (data.error) throw new Error(`OpenRouter error: ${data.error.message || JSON.stringify(data.error)}`);
+  const text = cleanOutput(data.choices?.[0]?.message?.content);
+  if (!text) throw new Error(`${MODEL_PRIORITY[0].id} returned an empty response`);
+  return text;
 }
 
 async function openrouterChatWithRetry(apiKeys, messages, opts) {
@@ -90,7 +100,7 @@ async function openrouterChatWithRetry(apiKeys, messages, opts) {
   for (const k of keys) {
     try {
       const result = await openrouterChat(k.key, messages, opts);
-      return { text: result, provider: "openrouter", keyName: k.name || "OpenRouter" };
+      return { text: result, provider: "openrouter", keyName: `OpenRouter · ${MODEL_PRIORITY[0].label}` };
     } catch (err) {
       errors.push(`${k.name || "OpenRouter"}: ${err.message}`);
     }

@@ -1,22 +1,98 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import Recorder from "./screens/Recorder";
 import Dashboard from "./screens/Dashboard";
 import Onboarding from "./screens/Onboarding";
 import Settings from "./screens/Settings";
 import CommandPalette from "./components/CommandPalette";
 import UpdatePrompt from "./components/UpdatePrompt";
-import { LayoutDashboard, Mic, Settings as SettingsIcon, Download, Check, Search } from "lucide-react";
+import GuidedTour from "./components/GuidedTour";
+import { LayoutDashboard, Mic, Settings as SettingsIcon, Download, Check, Search, Moon, Sun } from "lucide-react";
 import usePersistence, { ensureLoaded, writeStore } from "./hooks/usePersistence";
 import { SettingsProvider, useSettings } from "./context/SettingsContext";
-import { FONT, COLORS, GRADIENTS, applyTheme } from "./ui/theme";
+import { FONT, COLORS, GRADIENTS, applyTheme, CTA, isLight } from "./ui/theme";
+import { IconButton } from "./ui/kit";
 import * as T from "./ui/theme";
 import { ANIM_CSS } from "./ui/anim";
+
+// The window's chrome is three things: a wordmark, a floating icon pill, and
+// one appearance toggle. Nothing else competes for attention.
+const NAV_ITEMS = [
+  { id: "dashboard", icon: <LayoutDashboard size={17} strokeWidth={1.9} />, label: "Dashboard" },
+  { id: "recorder", icon: <Mic size={17} strokeWidth={1.9} />, label: "Recorder" },
+  { id: "settings", icon: <SettingsIcon size={17} strokeWidth={1.9} />, label: "Settings" },
+];
+
+// Brand mark: a small waveform glyph — Ovio turns speech into signal.
+function Logomark() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
+      <rect x="2" y="7" width="2.4" height="6" rx="1.2" fill={COLORS.text} />
+      <rect x="6.2" y="3.6" width="2.4" height="12.8" rx="1.2" fill={COLORS.text} />
+      <rect x="10.4" y="6" width="2.4" height="8" rx="1.2" fill={COLORS.accent} />
+      <rect x="14.6" y="8.4" width="2.4" height="3.2" rx="1.2" fill={COLORS.text} />
+    </svg>
+  );
+}
 
 const MODEL_LABELS = {
   small: "Whisper Small",
   turbo: "Whisper Turbo",
   large: "Whisper Large v3",
 };
+
+// The onboarding walkthrough. Each step names the view it belongs to and a
+// data-tour anchor in that view; the shell switches tabs before the spotlight
+// measures, so the tour can cross Dashboard → Recorder → Settings.
+const TOUR_STEPS = [
+  {
+    view: "dashboard",
+    target: '[data-tour="nav"]',
+    title: "This is your whole app",
+    body: "Dashboard, Recorder and Settings live in this pill. Everything else stays out of the way.",
+  },
+  {
+    view: "dashboard",
+    target: '[data-tour="record"]',
+    title: "Start recording",
+    body: "One click opens the recorder. A global shortcut can capture a thought from any app.",
+  },
+  {
+    view: "dashboard",
+    target: '[data-tour="ask"]',
+    title: "Ask across every recording",
+    body: "Ask in plain language and Ovio answers using transcripts, your notes and AI notes from the whole library — with citations.",
+  },
+  {
+    view: "dashboard",
+    target: '[data-tour="projects"]',
+    title: "Your library",
+    body: "Every recording lives in a project folder. Open one to see the recordings inside, or move items between folders.",
+  },
+  {
+    view: "dashboard",
+    target: '[data-tour="search"]',
+    title: "Search everything",
+    body: "⌘K searches titles, transcripts, AI notes, projects and vault files. It also jumps between views.",
+  },
+  {
+    view: "recorder",
+    target: '[data-tour="recorder-sidebar"]',
+    title: "The recorder's source list",
+    body: "Projects and folders sit on the left. The General Folder catches quick recordings made with the global shortcut.",
+  },
+  {
+    view: "recorder",
+    target: '[data-tour="recorder-stage"]',
+    title: "Pick a folder to record into",
+    body: "Choose a folder from the sidebar, or make a project first. Press record and the live transcript and AI notes fill the right side.",
+  },
+  {
+    view: "settings",
+    target: '[data-tour="settings-appearance"]',
+    title: "Make it yours",
+    body: "Switch light or dark, tune animation, and replay this tour any time. AI keys and transcription models live further up this page.",
+  },
+];
 
 function genId() {
   return Math.random().toString(36).slice(2, 10);
@@ -49,6 +125,19 @@ function AppShell() {
   const [recStatus, setRecStatus] = useState(null);
   // Universal search (⌘K): one palette over recordings, notes, files, projects.
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [paletteQuery, setPaletteQuery] = useState("");
+  // Onboarding ends in a guided spotlight tour; Settings can replay it.
+  const [tourOpen, setTourOpen] = useState(false);
+  // Setup fades out over the app instead of cutting to it. The flag keeps the
+  // overlay mounted for the length of the fade, then the gate below drops it.
+  const [onboardingExiting, setOnboardingExiting] = useState(false);
+  const ONBOARDING_FADE_MS = 760;
+  // The ask-bar hands its text to the palette so "search" and "ask" are the
+  // same surface with different entry points.
+  const openSearch = useCallback((q = "") => {
+    setPaletteQuery(typeof q === "string" ? q : "");
+    setPaletteOpen(true);
+  }, []);
   // Vault metadata (per-subfolder file attachments) lives here so both the
   // recorder and the ⌘K palette can see it. Binaries stay in userData/files,
   // metadata lives in the durable disk store (was: localStorage).
@@ -119,6 +208,21 @@ function AppShell() {
     setView(id);
   }, []);
 
+  // The tour crosses tabs; switch the view before each step's spotlight is
+  // measured. `goView` restarts the recorder entrance animation each time.
+  const handleTourIndex = useCallback((index) => {
+    const next = TOUR_STEPS[index];
+    if (!next?.view) return;
+    if (next.view === "recorder") setRecN((n) => n + 1);
+    setView(next.view);
+  }, []);
+
+  const finishTour = useCallback((startRecording) => {
+    setTourOpen(false);
+    update({ tourComplete: true });
+    if (startRecording) openRecorder();
+  }, [update, openRecorder]);
+
   // ⌘, jumps to Settings; ⌘K opens the universal search palette.
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -134,15 +238,36 @@ function AppShell() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  // Setup dissolves into the app rather than snapping to it: the overlay is
+  // faded first (it sits above the already-mounted shell), then the gate is
+  // cleared. Keeping the shell mounted underneath is what makes the reveal
+  // show the real Dashboard instead of an empty window.
+  const fadeOutOnboarding = useCallback(
+    () => new Promise((resolve) => {
+      setOnboardingExiting(true);
+      setTimeout(resolve, ONBOARDING_FADE_MS);
+    }),
+    [ONBOARDING_FADE_MS]
+  );
+
   const handleOnboardingComplete = useCallback(async () => {
+    await fadeOutOnboarding();
     await refresh();
     setView("dashboard");
-  }, [refresh]);
+    // Hand off from setup straight into the walkthrough.
+    setTourOpen(true);
+    setOnboardingExiting(false);
+  }, [fadeOutOnboarding, refresh]);
 
   const handleOnboardingSkip = useCallback(async () => {
+    await fadeOutOnboarding();
     await window.settingsAPI.update({ onboardingSkipped: true, onboardingComplete: true, mode: mode });
+    // Refresh the context so the onboarding gate reads the new flags —
+    // without this, skipping left the setup screen mounted.
+    await refresh();
     setView("dashboard");
-  }, [mode]);
+    setOnboardingExiting(false);
+  }, [fadeOutOnboarding, mode, refresh]);
 
   const setMode = useCallback((m) => {
     setModeState(m);
@@ -188,11 +313,12 @@ function AppShell() {
     if (file) importData(file);
   };
 
-  // Theme mode: applyTheme mutates the live COLORS object in place so every
-  // inline style reading COLORS re-resolves on the next render. Lives above
-  // every early return so the hook order stays stable.
-  useEffect(() => {
-    applyTheme(settings?.theme || "dark");
+  // Theme mode: applyTheme mutates the live COLORS object in place. Running
+  // it DURING render (memoized on the mode) means the styles computed for
+  // this same pass already use the new palette; an effect ran after commit
+  // and left the UI one render behind, so toggling looked broken.
+  useMemo(() => {
+    applyTheme(settings?.theme || "light");
   }, [settings?.theme]);
 
   if (loading || vaultBySub === null) {
@@ -203,44 +329,12 @@ function AppShell() {
     );
   }
 
-  // Onboarding gating: only when NOT complete AND not skipped. The recorder
-  // stays mounted (hidden) underneath so the global hotkey — and the
-  // walkthrough's own "Try it now" button — spawn a REAL recording even
-  // before onboarding is finished. Previously the ambient "record" command
-  // arrived here but nothing was listening (Recorder wasn't mounted), so
-  // the popup appeared and nothing ever recorded on the walkthrough screen.
-  if (!settings?.onboardingComplete && !settings?.onboardingSkipped) {
-    return (
-      <div style={{ width: "100vw", height: "100vh", display: "flex", position: "relative", overflow: "hidden" }}>
-        <EntranceVeil />
-        <Onboarding onComplete={handleOnboardingComplete} onSkip={handleOnboardingSkip} recStatus={recStatus} />
-        {/* Hidden ambient recorder — mounted ONLY so it can receive ambient
-            commands while the walkthrough is up. It must not affect layout. */}
-        <div
-          aria-hidden
-          style={{ position: "absolute", width: 0, height: 0, overflow: "hidden", opacity: 0, pointerEvents: "none" }}
-        >
-          <Recorder
-            projects={projects}
-            setProjects={setProjects}
-            recordingsBySub={recordingsBySub}
-            setRecordingsBySub={setRecordingsBySub}
-            navProjectId={navProjectId}
-            navSubprojectId={navSubprojectId}
-            navRecordingId={navRecordingId}
-            clearNavRecording={() => setNavRecordingId(null)}
-            onNavigateToDashboard={() => setView("dashboard")}
-            onRecordingStatus={setRecStatus}
-            ambientSignal={ambientSignal}
-            onAmbientStatus={forwardAmbientStatus}
-            ambientShortcutLabel={ambientShortcutLabel}
-            vaultBySub={vaultBySub}
-            setVaultBySub={setVaultBySub}
-          />
-        </div>
-      </div>
-    );
-  }
+  // Onboarding gating: only when NOT complete AND not skipped — but the app
+  // shell below is always mounted. Setup is drawn as a full-window overlay on
+  // top, so finishing it can fade the overlay away and reveal the real app
+  // (and the Recorder is already mounted for the ambient hotkey either way).
+  const onboardingGated = !settings?.onboardingComplete && !settings?.onboardingSkipped;
+  const showOnboarding = onboardingGated || onboardingExiting;
 
   // Settings → Animation level, applied as a real DOM class on the root so it
   // governs every view, pill, toast and popup (it previously sat inside the
@@ -274,7 +368,7 @@ function AppShell() {
 }
 button { -webkit-tap-highlight-color: transparent; font-family: inherit; }
 button:active { transform: scale(0.955); }
-button:focus-visible { outline: 2px solid rgba(86,120,154,0.45); outline-offset: 2px; }
+button:focus-visible { outline: 2px solid rgba(198,245,95,0.42); outline-offset: 2px; }
 /* Settings → Animation level. Applied on the app root so EVERY view, pill,
    toast and popup obeys. Levels are deliberately very different:
    • reduced — looping pulses/waves stop after one play, transitions snap to
@@ -292,79 +386,101 @@ button:focus-visible { outline: 2px solid rgba(86,120,154,0.45); outline-offset:
 }
 .ovio-anim-off button:active, .ovio-anim-off *:active { transform: none !important; }
 `}</style>
-      {/* Top nav — floating dark pill on black, the references' header language. */}
+      {/* Window chrome — wordmark left, floating icon pill centered, one
+          appearance toggle right. The window drags by the empty space. */}
       <div
         style={{
-          height: 52,
-          minHeight: 52,
+          position: "relative",
+          height: 72,
+          minHeight: 72,
           display: "flex",
           alignItems: "center",
-          justifyContent: "center",
-          gap: 2,
-          background: "transparent",
-          paddingLeft: 78,
-          paddingRight: 8,
+          justifyContent: "space-between",
+          paddingLeft: window.electronAPI?.platform === "darwin" ? 78 : 18,
+          paddingRight: 18,
+          WebkitAppRegion: "drag",
         }}
-      >        <span style={{
-          display: "inline-flex", alignItems: "center", gap: 7,
-          fontSize: 15, fontWeight: 800, letterSpacing: -0.3, color: COLORS.text,
-          marginRight: 14, WebkitAppRegion: "no-drag",
-        }}>
-          Ovio
-        </span>
-        <div style={{
-          display: "flex", alignItems: "center", gap: 2,
-          background: COLORS.surface2, border: `1px solid ${COLORS.border}`,
-          borderRadius: 999, padding: 3, WebkitAppRegion: "no-drag",
-          boxShadow: "0 8px 30px rgba(0,0,0,0.45)",
-        }}>
-        {[
-          { id: "dashboard", icon: <LayoutDashboard size={13} />, label: "Dashboard" },
-          { id: "recorder", icon: <Mic size={13} />, label: "Recorder" },
-          { id: "settings", icon: <SettingsIcon size={13} />, label: "Settings" },
-        ].map((v) => (
-          <button
-            key={v.id}
-            onClick={() => goView(v.id)}
-            style={{
-              display: "flex", alignItems: "center", gap: 5, border: "none",
-              background: view === v.id ? COLORS.accentSoft : "transparent",
-              color: view === v.id ? COLORS.blueBright : COLORS.textSecondary,
-              fontSize: 12, fontWeight: 600, borderRadius: 999, padding: "5px 13px",
-              cursor: "pointer", fontFamily: FONT,
-              transition: "background 220ms ease, color 220ms ease, transform 160ms cubic-bezier(.16,1,.3,1), box-shadow 220ms ease",
-              boxShadow: view === v.id ? "inset 0 0 0 1px rgba(86,120,154,0.45)" : "none",
-            }}
-          >
-            {v.icon}
-            {v.label}
-          </button>
-        ))}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 9, WebkitAppRegion: "no-drag" }}>
+          <Logomark />
+          <span style={{ fontSize: 16.5, fontWeight: 600, letterSpacing: "-0.025em", color: COLORS.text }}>
+            Ovio
+          </span>
         </div>
-        {/* Universal search — always visible in the nav. Click or ⌘K. */}
-        <button
-          onClick={() => setPaletteOpen(true)}
-          title="Search everything (⌘K)"
+
+        {/* The nav: icons only, the active one inverts to a solid white tile. */}
+        <div
+          data-tour="nav"
           style={{
-            display: "flex", alignItems: "center", gap: 7,
-            marginLeft: 10, border: `1px solid ${COLORS.border}`,
-            background: COLORS.surface2, color: COLORS.textTertiary,
-            fontSize: 11.5, fontWeight: 500, borderRadius: 999,
-            padding: "5px 12px", cursor: "pointer", fontFamily: FONT,
-            transition: "border-color 160ms ease, color 160ms ease",
+            position: "absolute",
+            left: "50%",
+            transform: "translateX(-50%)",
+            display: "flex",
+            alignItems: "center",
+            gap: 3,
+            background: COLORS.surface,
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: 999,
+            padding: 5,
+            WebkitAppRegion: "no-drag",
+            boxShadow: settings?.theme === "light" ? "0 4px 14px rgba(10,10,10,0.06)" : "0 8px 24px rgba(0,0,0,0.35)",
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = COLORS.borderStrong; e.currentTarget.style.color = COLORS.textSecondary; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = COLORS.border; e.currentTarget.style.color = COLORS.textTertiary; }}
         >
-          <Search size={12} />
-          Search
-          <span style={{
-            fontSize: 9.5, fontWeight: 600, color: COLORS.textTertiary,
-            border: `1px solid ${COLORS.border}`, borderRadius: 4,
-            padding: "0 4px", lineHeight: "14px",
-          }}>⌘K</span>
-        </button>
-        <div style={{ flex: 1 }} />
+          {NAV_ITEMS.map((v) => {
+            const active = view === v.id;
+            return (
+              <button
+                key={v.id}
+                onClick={() => goView(v.id)}
+                title={v.label}
+                aria-label={v.label}
+                style={{
+                  width: 44, height: 38, border: "none", borderRadius: 13,
+                  background: active ? CTA.bg : "transparent",
+                  color: active ? CTA.fg : COLORS.textSecondary,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  cursor: "pointer", fontFamily: FONT,
+                  transition: "background 200ms ease, color 200ms ease, transform 160ms cubic-bezier(.16,1,.3,1)",
+                }}
+                onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = COLORS.surface2; }}
+                onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}
+              >
+                {v.icon}
+              </button>
+            );
+          })}
+          <span style={{ width: 1, height: 20, background: COLORS.border, margin: "0 3px" }} />
+          <button
+            data-tour="search"
+            onClick={() => setPaletteOpen(true)}
+            title="Search everything (⌘K)"
+            aria-label="Search"
+            style={{
+              width: 44, height: 38, border: "none", borderRadius: 13,
+              background: "transparent", color: COLORS.textSecondary,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: "pointer", fontFamily: FONT,
+              transition: "background 200ms ease, color 200ms ease",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = COLORS.surface2; e.currentTarget.style.color = COLORS.text; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = COLORS.textSecondary; }}
+          >
+            <Search size={17} strokeWidth={1.9} />
+          </button>
+        </div>
+
+        {/* The bar is a window drag region; every control inside needs its
+            own no-drag island or Electron swallows the click. */}
+        <div style={{ WebkitAppRegion: "no-drag", display: "flex", flexShrink: 0 }}>
+          <IconButton
+            title={settings?.theme === "light" ? "Switch to dark" : "Switch to light"}
+            ariaLabel={settings?.theme === "light" ? "Switch to dark appearance" : "Switch to light appearance"}
+            size={40}
+            onClick={() => update({ theme: settings?.theme === "light" ? "dark" : "light" })}
+          >
+            {settings?.theme === "light" ? <Sun size={17} strokeWidth={1.9} /> : <Moon size={17} strokeWidth={1.9} />}
+          </IconButton>
+        </div>
       </div>
 
       {/* Settings — now a full tab (no more overlay). It receives its own
@@ -390,6 +506,7 @@ button:focus-visible { outline: 2px solid rgba(86,120,154,0.45); outline-offset:
           onClearAll={clearAll}
           onKeysChanged={refresh}
           ambientShortcutLabel={ambientShortcutLabel}
+          onReplayTour={() => setTourOpen(true)}
         />
       )}
 
@@ -410,7 +527,12 @@ button:focus-visible { outline: 2px solid rgba(86,120,154,0.45); outline-offset:
             <Dashboard
               projects={projects}
               recordingsBySub={recordingsBySub}
-              setRecordingsBySub={setRecordingsBySub}
+              onClearAll={clearAll}
+              onOpenRecorder={openRecorder}
+              onOpenSearch={openSearch}
+              onRenameProject={(pid, name) => {
+                setProjects((prev) => prev.map((p) => (p.id === pid ? { ...p, name } : p)));
+              }}
               onSelectRecording={(pid, sid, rec) => {
                 setNavProjectId(pid);
                 setNavSubprojectId(sid);
@@ -463,7 +585,8 @@ button:focus-visible { outline: 2px solid rgba(86,120,154,0.45); outline-offset:
       <UpdatePrompt />
       <CommandPalette
         open={paletteOpen}
-        onClose={() => setPaletteOpen(false)}
+        initialQuery={paletteQuery}
+        onClose={() => { setPaletteOpen(false); setPaletteQuery(""); }}
         projects={projects}
         recordingsBySub={recordingsBySub}
         vaultBySub={vaultBySub}
@@ -486,6 +609,42 @@ button:focus-visible { outline: 2px solid rgba(86,120,154,0.45); outline-offset:
 
       {/* Model download progress / completion popup */}
       <ModelDownloadToast />
+
+      {/* First-run walkthrough — also replayed from Settings → Appearance */}
+      <GuidedTour
+        open={tourOpen}
+        steps={TOUR_STEPS}
+        onIndexChange={handleTourIndex}
+        onSkip={() => finishTour(false)}
+        onFinish={() => finishTour(true)}
+      />
+
+      {/* Setup lives above the live app so finishing it is a dissolve, not a
+          page swap: opacity falls slowly, the Dashboard rises underneath, and
+          only then does the gate drop and the tour open. */}
+      {showOnboarding && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 1000,
+            display: "flex",
+            background: COLORS.windowBg,
+            opacity: onboardingExiting ? 0 : 1,
+            transform: onboardingExiting ? "scale(1.012)" : "scale(1)",
+            transition: `opacity ${ONBOARDING_FADE_MS}ms cubic-bezier(.4,0,.2,1), transform ${ONBOARDING_FADE_MS + 160}ms cubic-bezier(.4,0,.2,1)`,
+            pointerEvents: onboardingExiting ? "none" : "auto",
+            willChange: "opacity, transform",
+          }}
+        >
+          <Onboarding
+            onComplete={handleOnboardingComplete}
+            onSkip={handleOnboardingSkip}
+            recStatus={recStatus}
+          />
+          <EntranceVeil />
+        </div>
+      )}
 
     </div>
   );
@@ -621,11 +780,11 @@ function ModelDownloadToast() {
   return (
     <div style={{
       position: "fixed", right: 20, bottom: 20, zIndex: 300,
-      background: "rgba(17,18,22,0.88)", color: COLORS.text, borderRadius: 16,
+      background: COLORS.glass, color: COLORS.text, borderRadius: 16,
       backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)",
-      border: "1px solid rgba(255,255,255,0.1)",
+      border: `1px solid ${COLORS.glassBorder}`,
       padding: "12px 16px", minWidth: 260, maxWidth: 320,
-      boxShadow: "0 16px 50px rgba(0,0,0,0.6)", fontFamily: FONT,
+      boxShadow: isLight() ? "0 16px 50px rgba(10,10,10,0.14)" : "0 16px 50px rgba(0,0,0,0.6)", fontFamily: FONT,
       display: "flex", alignItems: "center", gap: 12,
       animation: "ovioToastIn 420ms cubic-bezier(.16,1,.3,1) both",
     }}>
@@ -642,7 +801,7 @@ function ModelDownloadToast() {
         </div>
         {dl ? (
           <>
-            <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,0.1)", marginTop: 6, overflow: "hidden" }}>
+            <div style={{ height: 4, borderRadius: 2, background: COLORS.border, marginTop: 6, overflow: "hidden" }}>
               <div style={{
                 height: "100%", width: `${Math.round(dl.progress * 100)}%`,
                 background: COLORS.blueBright, borderRadius: 2,

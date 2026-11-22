@@ -139,24 +139,68 @@ export function buildAiBehaviorBlock(behavior) {
   }
   const skills = b.skills || {};
   const sections = [];
-  if (skills.overview !== false) sections.push("## Overview\nA tight paragraph: what this was, who spoke, the vibe.");
-  if (skills.keyPoints !== false) sections.push("## Key Points\nBulleted, information-dense, no filler.");
-  if (skills.detailedSummary !== false) sections.push("## Detailed Summary\nOrganized by idea (not chronology), preserving specifics: names, numbers, decisions, reasoning.");
-  if (skills.followUps !== false) sections.push("## Follow-ups\nAction items with owners/deadlines where mentioned, plus open questions.");
-  if (sections.length) lines.push(`NOTE SECTIONS TO PRODUCE (in this order, markdown headings):\n${sections.join("\n")}`);
+  if (skills.overview !== false) {
+    sections.push(
+      "## Overview\n2-4 well-developed paragraphs: what this session was, who took part (names and roles when mentioned), why it happened, the main topics covered, and the single most important outcome."
+    );
+  }
+  if (skills.keyPoints !== false) {
+    sections.push(
+      "## Key Takeaways\n6-12 bullets. Each bullet starts with a **bold lead-in phrase** followed by one or two complete, specific sentences. No vague filler."
+    );
+  }
+  if (skills.detailedSummary !== false) {
+    sections.push(
+      "## Detailed Notes\nThe heart of the document and by far its longest part. One `### <Topic>` subsection for EVERY distinct topic, theme or concept discussed (typically 4-12 subsections). Inside each subsection: open with an explanatory paragraph (what it is, what was said, why it matters), then bullets for the specifics, with indented sub-bullets for supporting detail, examples, numbers and reasoning. Use a table whenever 3+ items are compared or listed with attributes, and numbered lists for steps or sequences."
+    );
+  }
+  if (skills.followUps !== false) {
+    sections.push(
+      "## Decisions\nBullets: each decision, who made it and the reasoning. Write \"- No explicit decisions were made.\" if none.\n\n" +
+      "## Action Items\nTask checkboxes in the form `- [ ] **Owner** — task (deadline)`. Use \"Unassigned\" / omit the deadline when not mentioned. Write \"- No action items were mentioned.\" if none.\n\n" +
+      "## Open Questions\nBullets for unresolved questions, risks, disagreements and things to follow up on."
+    );
+  }
+  if (sections.length) lines.push(`NOTE SECTIONS TO PRODUCE (in this order, after the title and TL;DR):\n\n${sections.join("\n\n")}`);
   lines.push(
     b.depth === "concise"
       ? "DEPTH: concise — compress hard, keep only decision-relevant content."
-      : "DEPTH: detailed — be exhaustive; this is the user's permanent record."
+      : "DEPTH: long and exhaustive — this is the user's permanent record. A thorough multi-page document is the goal; when in doubt, include more explanation and detail, not less."
   );
   return lines.join("\n\n");
 }
 
+export const NOTES_FORMAT_RULES = `FORMATTING (the app renders ONLY this markdown subset — use nothing else):
+- "# Title" once at the very top: a short, specific, descriptive title for the session.
+- Directly under it, one "> **TL;DR:** ..." line — two sentences capturing the essence.
+- "## Section" for top-level sections and "### Subsection" for topics within them.
+- "- " bullets; nest supporting detail with exactly two spaces: "  - detail".
+- "1. " numbered lists for steps, sequences or ranked items.
+- "- [ ] " checkboxes for action items only.
+- Pipe tables with a header row and a |---| separator row.
+- "> " for notable direct quotes or key definitions.
+- **bold** for key terms, names, figures and dates; *italic* for emphasis; \`code\` for exact identifiers, commands, file names.
+- Leave one blank line between blocks. Never use HTML, code fences, or emoji. Never wrap the output in a code block.`;
+
+const NOTES_QUALITY_RULES = `CONTENT RULES:
+- Cover EVERYTHING of substance. No topic, point, name, number, date, deadline, example, argument or decision may be missing.
+- Explain, don't just list: every idea gets context — what it is, what was said about it, why it matters, how it connects to the rest.
+- Preserve exact names, numbers, amounts, dates, IDs and terminology. Use short verbatim quotes when the exact wording matters.
+- Organize by ideas and themes, never by chronology. Never include timestamps.
+- Clean up the transcript: fix obvious speech-to-text errors from context, drop filler and small talk, but keep every real point.
+- Distinguish facts from opinions, and decisions from open questions. Note disagreements explicitly.
+- Write in clear, plain language with short sentences. Expand acronyms and briefly explain technical terms the first time they appear.
+- Never invent information. If something wasn't said, write "Not mentioned".
+- Never produce a wall of text: paragraphs stay under ~5 sentences, broken up by bullets, sub-bullets and tables.`;
+
 export function buildNotesSystem(behavior) {
   return [
-    "You write meeting and lecture notes from transcripts.",
-    "Output ONLY the notes in clean markdown. No preamble, no commentary.",
+    "You are an expert note-taker who turns meeting and lecture transcripts into long, deeply detailed, beautifully structured notes — the kind a reader can study instead of ever listening to the recording.",
+    "Output ONLY the notes in markdown. No preamble, no closing remarks, no commentary about the task.",
+    NOTES_FORMAT_RULES,
+    NOTES_QUALITY_RULES,
     buildAiBehaviorBlock(behavior),
+    "Finish with a \"## Summary\" section: 5-8 crisp bullets capturing the most important points of the whole session.",
   ].join("\n\n");
 }
 

@@ -49,9 +49,11 @@ export function SettingsProvider({ children }) {
           // New backend-backed settings surfaces (Settings tab).
           ambient: s.ambient || { enabled: true, chords: ["CommandOrControl+Shift+Space", "Alt+Shift+Space"] },
           animations: s.animations || "full",
-          theme: s.theme || "dark",
+          theme: s.theme || "light",
           aiBehavior: normalizeAiBehavior(s.aiBehavior),
           legalVersion: s.legalVersion || 1,
+          userName: s.userName || "",
+          tourComplete: !!s.tourComplete,
         });
         setActualKeys({
           groqKeys: plain.groqKeys || [],

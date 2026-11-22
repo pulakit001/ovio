@@ -140,14 +140,14 @@ export const ANIM_CSS = `
 }
 /* Blue flash for saved/updated highlights (was warm beige in the light theme). */
 @keyframes ovioFlash {
-  0% { background-color: rgba(86,120,154,0.28); }
+  0% { background-color: rgba(198,245,95,0.28); }
   100% { background-color: transparent; }
 }
 /* ---- New dark-vocabulary keyframes ---- */
 /* The hero orb breathes: outer glow swells and settles. */
 @keyframes ovioGlowBreathe {
-  0%, 100% { box-shadow: 0 0 60px 12px rgba(86,120,154,0.45), 0 0 160px 40px rgba(86,120,154,0.18), inset 0 0 40px rgba(255,255,255,0.12); }
-  50% { box-shadow: 0 0 90px 22px rgba(126,155,186,0.6), 0 0 220px 60px rgba(86,120,154,0.26), inset 0 0 48px rgba(255,255,255,0.16); }
+  0%, 100% { box-shadow: 0 0 60px 12px rgba(198,245,95,0.42), 0 0 160px 40px rgba(198,245,95,0.16), inset 0 0 40px rgba(255,255,255,0.12); }
+  50% { box-shadow: 0 0 90px 22px rgba(198,245,95,0.55), 0 0 220px 60px rgba(198,245,95,0.26), inset 0 0 48px rgba(255,255,255,0.16); }
 }
 /* The orb levitates — slow, weightless drift. */
 @keyframes ovioOrbFloat {
@@ -179,7 +179,7 @@ export const ANIM_CSS = `
 /* Marquee-free sliding underline for nav pills. */
 @keyframes ovioNavGlow {
   0%, 100% { box-shadow: 0 0 0 1px rgba(86,120,154,0.5); }
-  50% { box-shadow: 0 0 0 1px rgba(126,155,186,0.8); }
+  50% { box-shadow: 0 0 0 1px rgba(215,255,119,0.75); }
 }
 `;
 
