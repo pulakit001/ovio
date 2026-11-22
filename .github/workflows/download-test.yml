@@ -94,12 +94,11 @@ jobs:
           tail -20 app.log
           kill "$pid" 2>/dev/null || true
 
-      - name: AppImage extract + launch
+      - name: Run AppImage
         run: |
           chmod +x Ovio-x86_64.AppImage
-          ./Ovio-x86_64.AppImage --appimage-extract > /dev/null
-          ls squashfs-root | head
-          xvfb-run -a ./squashfs-root/AppRun --no-sandbox > appimage.log 2>&1 &
+          sudo apt-get install -y libfuse2t64 || sudo apt-get install -y libfuse2
+          xvfb-run -a ./Ovio-x86_64.AppImage --no-sandbox > appimage.log 2>&1 &
           pid=$!
           sleep 25
           if kill -0 "$pid" 2>/dev/null; then
