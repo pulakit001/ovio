@@ -60,11 +60,11 @@ jobs:
 
       - name: Smoke-check the packaged apps
         run: |
-          for ARCH in arm64 x64; do
-            APP="release/mac-${ARCH}/Ovio.app"
-            npx --yes @electron/asar list "${APP}/Contents/Resources/app.asar" | grep -q "^/dist/index.html$" \
+          for APP in "release/mac-arm64/Ovio.app" "release/mac/Ovio.app"; do
+            [ -d "$APP" ] || { echo "✖ missing build: $APP"; exit 1; }
+            npx --yes @electron/asar list "${APP}/Contents/Resources/app.asar" | grep -q "dist/index.html" \
               || { echo "✖ dist/index.html is NOT in ${APP} — the app would open blank."; exit 1; }
-            echo "✔ dist/index.html present in ${ARCH} build."
+            echo "✔ dist/index.html present in ${APP}."
           done
 
       - name: Verify signing (hard gate when a cert is configured)
@@ -111,7 +111,9 @@ jobs:
         shell: bash
         run: |
           APP="release/win-unpacked/resources/app.asar"
-          npx --yes @electron/asar list "$APP" | grep -q "^/dist/index.html$" \
+          [ -f "$APP" ] || { echo "✖ missing asar: $APP"; exit 1; }
+          # Strip CR: asar output on Windows uses CRLF line endings.
+          npx --yes @electron/asar list "$APP" | tr -d '\r' | grep -q "dist/index.html" \
             || { echo "✖ dist/index.html is NOT in the asar — the app would open blank."; exit 1; }
           echo "✔ dist/index.html is packaged."
 
