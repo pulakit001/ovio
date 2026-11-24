@@ -14,6 +14,15 @@ Update: `brew upgrade --cask ovio` · Remove: `brew uninstall --cask ovio`
 
 Prefer the DMG? Grab `Ovio-mac-arm64.dmg` from [Releases](https://github.com/pulakit001/ovio/releases/latest).
 
+Start over without losing recordings:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/pulakit001/ovio/main/scripts/reset-macos.sh | bash -s -- --install
+```
+
+That removes the app, caches, settings and downloaded models, keeps `files/` and `library/`,
+then reinstalls the latest build. Drop `-s -- --install` to only remove it.
+
 ## Windows
 
 Download `Ovio-Setup.exe` from [Releases](https://github.com/pulakit001/ovio/releases/latest), run it,
