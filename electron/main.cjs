@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, session, globalShortcut, screen, dialog, shell, Menu } = require("electron");
+const { app, BrowserWindow, ipcMain, session, globalShortcut, screen, dialog, shell, Menu, nativeTheme } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const {
@@ -67,6 +67,7 @@ let rendererReady = false;        // main renderer announced it can receive comm
 let pendingAmbientCommand = null; // shortcut fired before the renderer was ready
 const LOGO_PATH = path.join(__dirname, "..", "logo.png");
 const DOCK_ICON = path.join(__dirname, "..", "build", "icon", "icon_1024.png");
+const DOCK_ICON_DARK = path.join(__dirname, "..", "build", "icon", "icon_dark_1024.png");
 
 // NOTE: the separate splash window is gone by design. The app window itself
 // shows a cinematic in-app entrance animation (see src/App.jsx) the moment
@@ -294,6 +295,10 @@ function createWindow() {
       : {}),
     backgroundColor: chrome.background,
     show: false,
+    // Belt-and-braces against the default Electron menu: on Windows/Linux a
+    // menu bar would add a whole "File Edit View Window Help" row above the
+    // app's own header. macOS keeps its app menu for standard shortcuts.
+    autoHideMenuBar: true,
     icon: LOGO_PATH,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
@@ -307,6 +312,14 @@ function createWindow() {
       backgroundThrottling: false,
     },
   });
+
+  // Explicitly strip the menu from THIS window too (Menu.setApplicationMenu
+  // only applies to windows that ask for the app menu) so no platform or
+  // future default can bring the bar back, not even on Alt.
+  if (process.platform !== "darwin") {
+    mainWindow.setMenu(null);
+    mainWindow.setMenuBarVisibility(false);
+  }
 
   // When the main window is ready, show it — the in-app entrance animation
   // (App.jsx EntranceVeil) takes it from there.
@@ -365,14 +378,23 @@ app.whenReady().then(() => {
   // Linux. macOS keeps its app menu for standard shortcuts.
   if (process.platform !== "darwin") Menu.setApplicationMenu(null);
 
-  if (process.platform === "darwin" && app.dock) {
+  // Dock icon follows the system appearance: the light tile in light mode,
+  // the near-black tile with white capsules in dark mode. nativeTheme fires
+  // `updated` when the user switches, so the Dock changes with the system
+  // instead of keeping whichever icon happened to load at launch.
+  const applyDockIcon = () => {
+    if (process.platform !== "darwin" || !app.dock) return;
+    const wanted = nativeTheme.shouldUseDarkColors && fs.existsSync(DOCK_ICON_DARK)
+      ? DOCK_ICON_DARK
+      : (fs.existsSync(DOCK_ICON) ? DOCK_ICON : LOGO_PATH);
     try {
-      const dockIcon = require("fs").existsSync(DOCK_ICON) ? DOCK_ICON : LOGO_PATH;
-      app.dock.setIcon(dockIcon);
+      app.dock.setIcon(wanted);
     } catch (err) {
       console.warn("[ovio] Could not set dock icon:", err.message);
     }
-  }
+  };
+  applyDockIcon();
+  nativeTheme.on("updated", applyDockIcon);
 
   session.defaultSession.setPermissionRequestHandler(
     (webContents, permission, callback) => {

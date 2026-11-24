@@ -11,7 +11,8 @@ name: Windows CI
 #                       asyncio/WebSocket sidecar works off macOS.
 #
 # Neither job is an interactive desktop: this catches build/packaging/runtime
-# regressions, not UI behaviour.
+# regressions, not UI behaviour. The one UI contract it does enforce is that
+# the packaged app strips Electron's default menu bar.
 
 on:
   push:
@@ -65,6 +66,16 @@ jobs:
           npx --yes @electron/asar list "$APP" | tr -d '\r' | grep -qi "index.html" \
             || { echo "::error::renderer (index.html) is NOT in the asar."; exit 1; }
           echo "✔ renderer (index.html) is packaged."
+          # No native menu bar: the app must strip Electron's default
+          # File/Edit/View/Window/Help menu, otherwise a whole extra toolbar row
+          # appears above Ovio's own header. Assert it on the PACKAGED main
+          # process so a regression fails here instead of on a user's laptop.
+          npx --yes @electron/asar extract-file "$APP" electron/main.cjs
+          for token in "setApplicationMenu(null)" "autoHideMenuBar: true" "setMenuBarVisibility(false)"; do
+            grep -qF "$token" main.cjs \
+              || { echo "::error::default Electron menu removal missing from packaged main.cjs ($token)."; exit 1; }
+          done
+          echo "✔ default Electron menu is stripped from the packaged app."
           # The win32-x64 native whisper binding is an optional dependency; it
           # must be unpacked or on-device transcription silently fails at runtime.
           find release/win-unpacked -name "whisper.node" | tr -d '\r' | grep -q "win32-x64" \
