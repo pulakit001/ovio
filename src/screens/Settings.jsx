@@ -144,6 +144,9 @@ function Seg({ options, value, onChange, small }) {
   );
 }
 
+// 1.2 GB — same units the download popup reports.
+const fmtGb = (bytes) => (bytes ? `${(bytes / 1073741824).toFixed(1)} GB` : "");
+
 // Quiet text-link used for inline actions inside rows (Install engine,
 // Download model…).
 function TextAction({ onClick, children, danger }) {
@@ -712,10 +715,12 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
                       {modelRow(
                         pkSelected,
                         "Parakeet-TDT v3",
-                        "Streams live · ~2.5 GB",
+                        downloading
+                          ? `Streaming model · ${fmtGb(pk?.weights?.received) || "0.0 GB"} of ${fmtGb(pk?.weights?.total) || pk?.sizeLabel || "~2.5 GB"}`
+                          : "Streams live · ~2.5 GB",
                         downloading || engineInstalling ? COLORS.textSecondary : engineError ? COLORS.red : COLORS.textTertiary,
                         engineError ? "Engine error"
-                          : engineInstalling ? "Installing engine…"
+                          : engineInstalling ? "Installing engine… 5–15 min"
                           : !engineReady ? "Engine not installed"
                           : downloading ? `Downloading… ${progress}%`
                           : downloaded ? (pk?.server?.running ? "Ready · streaming" : "Ready")

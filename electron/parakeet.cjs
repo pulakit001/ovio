@@ -37,6 +37,7 @@ const STUB_MODE = process.env.PARAKEET_STUB === "1";
 
 const engine = {
   state: "missing", // missing | installing | ready | error
+  step: null, // python | venv | pip | packages — what the installer is doing now
   error: null,
   log: [],
   inflight: null,
@@ -45,6 +46,8 @@ const engine = {
 const weights = {
   downloading: false,
   progress: 0,
+  received: 0, // bytes written so far (drives "1.2 GB of 2.5 GB" in the UI)
+  total: 0, // content-length reported by HuggingFace (0 until headers arrive)
   inflight: null,
 };
 
@@ -195,6 +198,7 @@ async function installEngine() {
 
   engine.inflight = (async () => {
     engine.state = "installing";
+    engine.step = "python";
     engine.error = null;
     pushLog("— Parakeet engine install started —");
     emit("engine-installing");
@@ -209,10 +213,14 @@ async function installEngine() {
 
       fs.mkdirSync(baseDir(), { recursive: true });
       if (!fs.existsSync(venvPython())) {
+        engine.step = "venv";
+        emit("engine-step");
         pushLog("creating virtualenv…");
         await execFile(py.bin, ["-m", "venv", venvDir()], { onOut: pushLog, onErr: pushLog });
       }
 
+      engine.step = "pip";
+      emit("engine-step");
       pushLog("upgrading pip…");
       await execFile(venvPip(), ["install", "--upgrade", "pip", "wheel", "setuptools"], {
         onOut: pushLog,
@@ -220,6 +228,8 @@ async function installEngine() {
       });
 
       // The big one: torch + NeMo (~2-3 GB). Progress arrives as pip log lines.
+      engine.step = "packages";
+      emit("engine-step");
       pushLog(`installing ${ENGINE_PACKAGES.join(" ")} — this can take 5–15 minutes…`);
       await execFile(venvPip(), ["install", "-U", ...ENGINE_PACKAGES], {
         onOut: pushLog,
@@ -228,11 +238,13 @@ async function installEngine() {
 
       fs.writeFileSync(markerFile(), String(ENGINE_VERSION));
       engine.state = "ready";
+      engine.step = null;
       pushLog("— engine installed —");
       emit("engine-ready");
       return { ok: true };
     } catch (err) {
       engine.state = "error";
+      engine.step = null;
       engine.error = err.message;
       pushLog(`— engine install failed: ${err.message} —`);
       emit("engine-error");
@@ -277,6 +289,8 @@ function downloadWeights() {
 
     weights.downloading = true;
     weights.progress = 0;
+    weights.received = 0;
+    weights.total = 0;
     emit("weights-downloading");
 
     request.on("response", (response) => {
@@ -286,12 +300,14 @@ function downloadWeights() {
         return;
       }
       total = parseInt(response.headers["content-length"], 10) || 0;
+      weights.total = total;
       fileStream = fs.createWriteStream(tmp);
       response.on("data", (chunk) => {
         received += chunk.length;
         fileStream.write(chunk);
         const progress = total ? received / total : 0;
         weights.progress = progress;
+        weights.received = received;
         const now = Date.now();
         if (now - lastEmit > 250) {
           lastEmit = now;
@@ -304,6 +320,7 @@ function downloadWeights() {
             fs.renameSync(tmp, dest);
             weights.downloading = false;
             weights.progress = 1;
+            weights.received = total || received;
             resolve(dest);
             emit("weights-downloaded");
           } catch (err) {
@@ -319,6 +336,8 @@ function downloadWeights() {
         fs.existsSync(tmp) && fs.unlinkSync(tmp);
       } catch {}
       weights.downloading = false;
+      weights.received = 0;
+      weights.total = 0;
       emit("weights-error");
       reject(err);
     });
@@ -465,6 +484,7 @@ function status() {
     stub: STUB_MODE,
     engine: {
       state: engineInstalled() ? "ready" : engine.state,
+      step: engine.step,
       error: engine.error,
       log: engine.log.slice(-8),
     },
@@ -472,6 +492,9 @@ function status() {
       downloaded: weightsDownloaded(),
       downloading: weights.downloading,
       progress: weights.progress,
+      received: weights.received,
+      total: weights.total,
+      sizeLabel: SIZE_LABEL,
     },
     server: {
       running: !!(server.proc && server.port),

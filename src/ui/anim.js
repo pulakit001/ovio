@@ -99,6 +99,10 @@ export const ANIM_CSS = `
   0%, 80%, 100% { transform: translateY(0); opacity: 0.35; }
   40% { transform: translateY(-3px); opacity: 1; }
 }
+@keyframes ovioBarSlide {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(300%); }
+}
 @keyframes ovioShimmer {
   0% { background-position: -220% 0; }
   100% { background-position: 220% 0; }

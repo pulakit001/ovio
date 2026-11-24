@@ -38,6 +38,7 @@ import { askLibrary, askQuestion } from "../services/ai";
 import { useSettings } from "../context/SettingsContext";
 import { ANIM_CSS, rowIn, stepIn } from "../ui/anim";
 import { COLORS, CTA } from "../ui/theme"; // live theme object — follows dark/light swaps
+import { ModelSetupModal, useLocalModelSetup } from "../ui/ModelSetupModal";
 import TransferModal from "../components/TransferModal";
 
 const FONT =
@@ -1199,6 +1200,17 @@ export default function MacNoteTaker({
   setVaultBySub,
 }) {
   const { settings, getActiveGroqKeys, getActiveOpenRouterKeys, hasAnyKey } = useSettings();
+
+  // Local-model gate: while Parakeet is still installing or downloading, record
+  // must NOT start a session that can only fall back to a missing Whisper file
+  // and paint a red error at the bottom. It opens a progress popup instead.
+  const localModelSetup = useLocalModelSetup();
+  const [modelWaitOpen, setModelWaitOpen] = useState(false);
+  const localModelBlocked =
+    localModelSetup.available &&
+    (settings?.mode || "local") !== "cloud" &&
+    (settings?.localSttModel || "large") === "parakeet" &&
+    !localModelSetup.ready;
   const [expanded, setExpanded] = useState({});
   const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [selectedSubprojectId, setSelectedSubprojectId] = useState(null);
@@ -1451,11 +1463,15 @@ export default function MacNoteTaker({
       setIsRecording(false);
       stopTranscription();
     } else {
+      if (localModelBlocked) {
+        setModelWaitOpen(true);
+        return;
+      }
       setIsRecording(true);
       setAutoScroll(true);
       startTranscription();
     }
-  }, [isRecording, startTranscription, stopTranscription]);
+  }, [isRecording, localModelBlocked, startTranscription, stopTranscription]);
 
   const stopRecording = useCallback(() => {
     setIsRecording(false);
@@ -1504,6 +1520,12 @@ export default function MacNoteTaker({
   }, []);
 
   const startAmbientRecording = useCallback(() => {
+    // The shortcut can fire while the model is still installing — the floating
+    // panel has no room for the explanation, so the main window shows it.
+    if (localModelBlocked) {
+      setModelWaitOpen(true);
+      return;
+    }
     ensureGeneralFolder();
     if (activeRecordingId) {
       const isAmbientSession = (recordingsBySub[GENERAL_SUB_ID] || []).some((r) => r.id === activeRecordingId);
@@ -1560,6 +1582,7 @@ export default function MacNoteTaker({
   }, [
     activeRecordingId, isRecording, recordingsBySub, toggleRecording,
     ensureGeneralFolder, clearInterim, startTranscription,
+    localModelBlocked,
     GENERAL_PROJECT_ID, GENERAL_SUB_ID,
   ]);
 
@@ -2532,7 +2555,15 @@ export default function MacNoteTaker({
                     </button>
                   </div>
                   <span style={{ fontSize: 12, color: COLORS.textSecondary, transition: "color 150ms ease" }}>
-                    {isRecording ? "Tap to pause" : transcript.length > 0 || elapsed > 0 ? "Tap to resume" : "Tap to record"}
+                    {isRecording
+                      ? "Tap to pause"
+                      : localModelBlocked
+                        ? localModelSetup.weightsDownloading
+                          ? `Model downloading · ${localModelSetup.percent}%`
+                          : "Setting up your model…"
+                        : transcript.length > 0 || elapsed > 0
+                          ? "Tap to resume"
+                          : "Tap to record"}
                   </span>
                 </div>
 
@@ -2843,6 +2874,23 @@ export default function MacNoteTaker({
             Moved to {moveToast}
           </span>
         </div>
+      )}
+
+      {/* "Please wait" popup: shown when record is pressed before the local
+          model finished installing/downloading. Live stage + percentage. */}
+      {modelWaitOpen && (
+        <ModelSetupModal
+          setup={localModelSetup}
+          onClose={() => setModelWaitOpen(false)}
+          onReady={() => {
+            setModelWaitOpen(false);
+            if (!isRecording) {
+              setIsRecording(true);
+              setAutoScroll(true);
+              startTranscription();
+            }
+          }}
+        />
       )}
     </div>
   );
