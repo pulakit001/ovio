@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronLeft, Cloud, Cpu, Download, Mic, ShieldCheck, Sparkles } from "lucide-react";
+import { Check, ChevronLeft, Cloud, Cpu, Download, Mic, ShieldCheck } from "lucide-react";
 import { COLORS, CTA, FONT } from "../ui/theme";
 import { verifyOpenRouterKey } from "../services/verifyKeys";
 
@@ -76,7 +76,13 @@ export default function Onboarding({ onComplete, onSkip }) {
       setChecking(false);
     }
   };
-  const advance = () => index < STEPS.length - 1 ? setIndex(index + 1) : choice === "cloud" ? verify() : finish();
+  const advance = () => {
+    // "Continue in background" is an action, not just a route change: start
+    // both independent Parakeet downloads before moving to AI-note setup.
+    if (step === "voice" && !readyParakeet) startParakeet();
+    if (index < STEPS.length - 1) return setIndex(index + 1);
+    return choice === "cloud" ? verify() : finish();
+  };
   const left = useMemo(() => ({
     hello: [name.trim() ? `Welcome, ${name.trim()}.` : "A better memory for real life.", "Ovio records, transcribes and organises conversations without getting in your way."],
     voice: ["Your voice stays yours.", "Parakeet transcribes directly on this device. Your audio never needs to leave it."],

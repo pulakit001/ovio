@@ -613,51 +613,84 @@ button:focus-visible { outline: 2px solid rgba(198,245,95,0.42); outline-offset:
             onSkip={handleOnboardingSkip}
             recStatus={recStatus}
           />
-          <EntranceVeil />
         </div>
       )}
+
+      <EntranceVeil reduced={settings?.animations !== "full"} />
 
     </div>
   );
 }
 
-// ===== In-app cinematic entrance =====
-// Replaces the old separate splash window entirely. When the app boots, a
-// near-black veil sits on top with a breathing blue orb and the wordmark;
-// content rises out from underneath it; then the veil "ripples" away — a
-// circular clip-path reveal from the orb outward. Pure CSS + one timer.
-function EntranceVeil() {
-  const [phase, setPhase] = useState("hold"); // hold → ripple → gone
+// ===== In-app splash =====
+// A compact waveform builds into the Ovio wordmark, then yields to the app.
+// This runs above both the welcome flow and a returning user's workspace.
+function EntranceVeil({ reduced = false }) {
+  const [phase, setPhase] = useState("intro");
   useEffect(() => {
-    const a = setTimeout(() => setPhase("ripple"), 950);
-    const b = setTimeout(() => setPhase("gone"), 1750);
+    const a = setTimeout(() => setPhase("out"), reduced ? 280 : 1640);
+    const b = setTimeout(() => setPhase("gone"), reduced ? 520 : 2040);
     return () => { clearTimeout(a); clearTimeout(b); };
-  }, []);
+  }, [reduced]);
   if (phase === "gone") return null;
-  const isLight = COLORS.windowBg && String(COLORS.windowBg).startsWith("#F");
+  const light = isLight();
+  const bars = [0.4, 0.65, 1, 0.72, 0.42];
   return (
     <div
-      aria-hidden
+      role="status"
+      aria-label="Starting Ovio"
       style={{
-        position: "fixed", inset: 0, zIndex: 9000, pointerEvents: "none",
+        position: "fixed", inset: 0, zIndex: 1400, pointerEvents: "none",
         display: "flex", alignItems: "center", justifyContent: "center",
-        background: isLight ? "#F7F5F0" : "#050507",
-        // Release: a quiet fade — no ripple theatrics.
-        opacity: phase === "ripple" ? 0 : 1,
-        transition: "opacity 600ms cubic-bezier(.3,0,.2,1)",
+        background: light ? "#FAFAF8" : "#080809",
+        color: COLORS.text,
+        opacity: phase === "out" ? 0 : 1,
+        transition: "opacity 400ms cubic-bezier(.4,0,.2,1)",
       }}
     >
       <style>{`
-        @keyframes ovioVeilMark {
-          0% { opacity: 0; transform: translateY(6px); }
-          100% { opacity: 1; transform: translateY(0); }
+        @keyframes ovioSplashBarIn {
+          from { opacity: 0; transform: scaleY(0); }
+          to { opacity: 1; transform: scaleY(var(--ovio-splash-height)); }
+        }
+        @keyframes ovioSplashWave {
+          0%, 100% { transform: scaleY(var(--ovio-splash-height)); }
+          32% { transform: scaleY(calc(var(--ovio-splash-height) * 1.3)); }
+          66% { transform: scaleY(calc(var(--ovio-splash-height) * .78)); }
+        }
+        @keyframes ovioSplashWordOpen {
+          to { max-width: 2.42em; margin-left: .32em; }
+        }
+        @keyframes ovioSplashLetterIn {
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .ovio-splash-lockup { display: flex; align-items: center; font-family: ${FONT}; font-size: clamp(44px, 7vw, 68px); line-height: 1; }
+        .ovio-splash-mark { display: flex; align-items: center; gap: .1em; height: .72em; }
+        .ovio-splash-bar { width: .125em; height: 100%; border-radius: 999px; background: ${COLORS.text}; opacity: 0; transform: scaleY(0); transform-origin: center; animation: ovioSplashBarIn 480ms cubic-bezier(.16,1,.3,1) calc(110ms + var(--ovio-splash-index) * 52ms) both, ovioSplashWave 560ms ease-in-out calc(700ms + var(--ovio-splash-index) * 42ms) both; }
+        .ovio-splash-bar.is-accent { background: ${COLORS.accent}; }
+        .ovio-splash-word { display: flex; overflow: hidden; max-width: 0; margin-left: 0; padding: .08em 0; animation: ovioSplashWordOpen 560ms cubic-bezier(.16,1,.3,1) 800ms forwards; }
+        .ovio-splash-letter { display: inline-block; color: ${COLORS.text}; font-size: 1em; font-weight: 720; letter-spacing: -.055em; opacity: 0; transform: translateY(58%); animation: ovioSplashLetterIn 500ms cubic-bezier(.16,1,.3,1) calc(820ms + var(--ovio-splash-index) * 54ms) forwards; }
+        @media (prefers-reduced-motion: reduce) {
+          .ovio-splash-bar { animation: none; opacity: 1; transform: scaleY(var(--ovio-splash-height)); }
+          .ovio-splash-word { animation: none; max-width: 2.42em; margin-left: .32em; }
+          .ovio-splash-letter { animation: none; opacity: 1; transform: none; }
         }
       `}</style>
-      <div style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center" }}>
-        <div style={{
-          fontSize: 21, fontWeight: 800, color: isLight ? "#0B0C10" : "#F5F6F8",
-          animation: "ovioVeilMark 600ms cubic-bezier(.22,1,.36,1) both",
-        }}>Ovio</div>
+      <div className="ovio-splash-lockup" aria-hidden="true">
+        <div className="ovio-splash-mark">
+          {bars.map((height, index) => (
+            <span
+              key={height}
+              className={`ovio-splash-bar${index === 2 ? " is-accent" : ""}`}
+              style={{ "--ovio-splash-height": height, "--ovio-splash-index": index }}
+            />
+          ))}
+        </div>
+        <div className="ovio-splash-word">
+          {"Ovio".split("").map((letter, index) => (
+            <span key={letter} className="ovio-splash-letter" style={{ "--ovio-splash-index": index }}>{letter}</span>
+          ))}
+        </div>
       </div>
     </div>
   );
