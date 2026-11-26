@@ -1,6 +1,6 @@
 {
   "name": "ovio",
-  "version": "1.4.6",
+  "version": "1.4.7",
   "description": "Talk anywhere — real-time transcription & AI notes, local-first",
   "main": "electron/main.cjs",
   "scripts": {

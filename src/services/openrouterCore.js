@@ -1,12 +1,24 @@
 const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
 
 const MODEL_PRIORITY = [
-  { id: "inclusionai/ling-3.2-flash:free", label: "Ling 3.2 Flash", context: 1_048_576, maxOutput: 262_144 },
+  // A router, not a fixed upstream pool. OpenRouter selects a currently
+  // available free text model for each request, so one provider outage does
+  // not make cloud notes unavailable.
+  { id: "openrouter/free", label: "Free Models Router", context: 200_000, maxOutput: 4096 },
 ];
 
-// Strip reasoning blocks and a wrapping ```markdown fence some models emit.
-function cleanOutput(text) {
-  return (text || "")
+const REQUEST_TIMEOUT_MS = 60_000;
+
+function textContent(content) {
+  if (Array.isArray(content)) {
+    return content.map((part) => typeof part === "string" ? part : part?.text || "").join("");
+  }
+  return typeof content === "string" ? content : "";
+}
+
+// Strip reasoning blocks and a wrapping ```markdown fence some routed models emit.
+function cleanOutput(content) {
+  return textContent(content)
     .replace(/<think>[\s\S]*?<\/think>/gi, "")
     .trim()
     .replace(/^```(?:markdown|md)?\s*\n([\s\S]*?)\n```$/i, "$1")
@@ -29,7 +41,7 @@ async function fetchWithRetry(url, options, { retries = 2, baseDelayMs = 1200 } 
   let lastErr = null;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const res = await fetch(url, options);
+      const res = await fetch(url, { ...options, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
       if (res.ok || !RETRYABLE_STATUS.has(res.status)) return res;
       lastErr = new Error(`HTTP ${res.status}`);
       lastErr.status = res.status;
@@ -41,6 +53,17 @@ async function fetchWithRetry(url, options, { retries = 2, baseDelayMs = 1200 } 
     if (attempt < retries) await sleep(baseDelayMs * 2 ** attempt);
   }
   throw lastErr;
+}
+
+function providerError(status, raw = "") {
+  if (status === 429) {
+    return "OpenRouter's free-model pool is busy. Please retry shortly.";
+  }
+  try {
+    const message = JSON.parse(raw)?.error?.message;
+    if (message) return `OpenRouter error ${status}: ${String(message).slice(0, 240)}`;
+  } catch {}
+  return `OpenRouter error ${status}`;
 }
 
 async function openrouterChat(apiKey, messages, { system, maxTokens = 4096, temperature = 0.3 } = {}) {
@@ -68,14 +91,14 @@ async function openrouterChat(apiKey, messages, { system, maxTokens = 4096, temp
   } catch (err) {
     if (err && err.status && err.res) {
       const text = await err.res.text().catch(() => "");
-      throw new Error(`OpenRouter error ${err.status} (after retries): ${text}`);
+      throw new Error(`${providerError(err.status, text)} (after retries)`);
     }
     throw new Error(`OpenRouter request failed: ${err?.message || err}`);
   }
 
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`OpenRouter error ${res.status}: ${err}`);
+    throw new Error(providerError(res.status, err));
   }
 
   const data = await res.json();
