@@ -6,13 +6,12 @@ Local meeting recorder with on-device transcription.
 
 ```bash
 brew tap pulakit001/ovio https://github.com/pulakit001/ovio
-brew trust pulakit001/ovio
 brew install --cask ovio
 ```
 
 Update: `brew upgrade --cask ovio` · Remove: `brew uninstall --cask ovio`
 
-Prefer the DMG? Grab `Ovio-mac-arm64.dmg` from [Releases](https://github.com/pulakit001/ovio/releases/latest).
+Prefer the DMG? Grab `Ovio-mac-arm64.dmg` (Apple Silicon) or `Ovio-mac-x64.dmg` (Intel) from [Releases](https://github.com/pulakit001/ovio/releases/latest).
 
 Start over without losing recordings:
 
@@ -37,9 +36,11 @@ Download from [Releases](https://github.com/pulakit001/ovio/releases/latest), th
 
 ```bash
 # Debian / Ubuntu
+curl -fLO https://github.com/pulakit001/ovio/releases/latest/download/Ovio-amd64.deb
 sudo apt install ./Ovio-amd64.deb
 
 # Any distro (needs libfuse2)
+curl -fLO https://github.com/pulakit001/ovio/releases/latest/download/Ovio-x86_64.AppImage
 chmod +x Ovio-x86_64.AppImage
 ./Ovio-x86_64.AppImage
 ```
