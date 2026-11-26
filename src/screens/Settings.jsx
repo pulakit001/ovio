@@ -864,7 +864,7 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
             <KeyRow key={k.id} entry={k} provider="groq" onUpdate={(e) => updateKey("groq", e)} onRemove={(id) => removeKey("groq", id)} onToggle={(id) => toggleKey("groq", id)} last={i === groqKeys.length - 1 && openrouterKeys.length === 0 && !showAddOr} />
           ))}
           {!loadingKeys && groqKeys.length === 0 && (
-            <div style={{ fontSize: 11.5, color: COLORS.textTertiary, padding: "0 14px 10px" }}>No keys yet — needed for cloud transcription.</div>
+            <div style={{ fontSize: 11.5, color: COLORS.textTertiary, padding: "0 14px 10px" }}>No keys yet — only needed for AI notes.</div>
           )}
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 14px 6px", borderTop: `1px solid ${COLORS.border}` }}>
@@ -918,7 +918,7 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
               <div style={{ fontSize: 12, color: COLORS.textSecondary, lineHeight: 1.75 }}>
                 <p><strong style={{ color: COLORS.text }}>1. Acceptance.</strong> By using Ovio you agree to these terms. If you don't agree, don't use the app.</p>
                 <p><strong style={{ color: COLORS.text }}>2. What Ovio does.</strong> Ovio records audio you choose to record, transcribes it (locally or via your configured cloud provider), and generates AI notes. You are responsible for what you record and for complying with the laws and consent rules that apply to recording conversations in your jurisdiction.</p>
-                <p><strong style={{ color: COLORS.text }}>3. Your data.</strong> Recordings, transcripts and notes live on your Mac. API keys are encrypted locally. Cloud transcription/notes are processed by the providers you configure (Gemini, OpenRouter, or your own Ollama) under their terms; in fully-local mode nothing leaves your machine.</p>
+                <p><strong style={{ color: COLORS.text }}>3. Your data.</strong> Recordings, transcripts and notes live on your Mac, and transcription always runs on-device. API keys are encrypted locally. AI notes are written by the provider you configure (Gemini, OpenRouter, or your own Ollama) under its terms; with Ollama or fully-local mode nothing leaves your machine.</p>
                 <p><strong style={{ color: COLORS.text }}>4. AI output.</strong> AI-generated notes and answers can contain mistakes. Verify important information; Ovio is a note-taking aid, not an authoritative record.</p>
                 <p><strong style={{ color: COLORS.text }}>5. Acceptable use.</strong> Don't use Ovio to violate laws or others' rights, including recording people without legally required consent.</p>
                 <p><strong style={{ color: COLORS.text }}>6. No warranty.</strong> Ovio is provided "as is" without warranties of any kind. Snippetz Labs is not liable for damages arising from use of the app, to the maximum extent permitted by law.</p>

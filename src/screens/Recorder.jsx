@@ -2347,30 +2347,23 @@ export default function MacNoteTaker({
         {/* Main area */}
         {!selectedSubprojectId ? (
           <div data-tour="recorder-stage" style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.windowBg }}>
-            {noApiKey ? (
-              <div style={{ ...stepIn(0), display: "flex", flexDirection: "column", alignItems: "center", gap: 10, textAlign: "center" }}>
-                <div style={{ width: 48, height: 48, borderRadius: 12, background: COLORS.surface2, border: `1px solid ${COLORS.border}`, display: "flex", alignItems: "center", justifyContent: "center", animation: "ovioFloat 3s ease-in-out infinite" }}>
-                  <Brain size={22} color={COLORS.blue} />
-                </div>
-                <div style={{ fontWeight: 600, color: COLORS.text, fontSize: 15 }}>Add an API key to get started</div>
-                <div style={{ color: COLORS.textSecondary, lineHeight: 1.6 }}>Unlock AI notes and cloud transcription.</div>
+            {/* Recording and transcription are local and need no key, so a
+                missing API key must not replace the place where you start a
+                take — it is only called out inside the AI Notes tab. */}
+            <div style={{ ...stepIn(0), display: "flex", flexDirection: "column", alignItems: "center", gap: 8, textAlign: "center" }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: COLORS.text }}>Let&apos;s set up your recording space</div>
+              <div style={{ color: COLORS.textSecondary, lineHeight: 1.6, fontSize: 13.5 }}>
+                Select a subproject from the sidebar<br />
+                or create one to start recording
               </div>
-            ) : (
-              <div style={{ ...stepIn(0), display: "flex", flexDirection: "column", alignItems: "center", gap: 8, textAlign: "center" }}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: COLORS.text }}>Let&apos;s set up your recording space</div>
-                <div style={{ color: COLORS.textSecondary, lineHeight: 1.6, fontSize: 13.5 }}>
-                  Select a subproject from the sidebar<br />
-                  or create one to start recording
-                </div>
-                <button onClick={() => setCreatingProject(true)} style={{
-                  display: "flex", alignItems: "center", gap: 6, marginTop: 6,
-                  background: CTA.bg, color: CTA.fg, border: "none", fontWeight: 600,
-                  fontSize: 12.5, borderRadius: 999, padding: "8px 16px", cursor: "pointer",
-                }}>
-                  <Plus size={14} /> New project
-                </button>
-              </div>
-            )}
+              <button onClick={() => setCreatingProject(true)} style={{
+                display: "flex", alignItems: "center", gap: 6, marginTop: 6,
+                background: CTA.bg, color: CTA.fg, border: "none", fontWeight: 600,
+                fontSize: 12.5, borderRadius: 999, padding: "8px 16px", cursor: "pointer",
+              }}>
+                <Plus size={14} /> New project
+              </button>
+            </div>
           </div>
         ) : folderNotesOpen ? (
           <FolderNotesView

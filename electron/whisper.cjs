@@ -16,7 +16,7 @@ function loadWhisperNative() {
     return whisperNative;
   } catch (err) {
     whisperNativeError = new Error(
-      "Local Whisper isn't available on this platform — use the Parakeet engine or cloud transcription in Settings."
+      "Local Whisper isn't available on this platform — use the Parakeet engine in Settings instead."
     );
     whisperNativeError.cause = err;
     throw whisperNativeError;
