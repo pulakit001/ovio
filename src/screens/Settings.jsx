@@ -646,33 +646,9 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
 
         {/* ===== 1 · Transcription ===== */}
         <Group label="Transcription">
-          <Row
-            title="Mode"
-            sub={mode === "cloud" ? "Cloud — Groq Whisper (STT)" : "Local — on-device, private"}
-            last={!window.electronAPI || mode === "cloud"}
-          >
-            <Seg
-              value={mode}
-              onChange={setMode}
-              options={[
-                { value: "local", label: "Local" },
-                { value: "cloud", label: "Cloud" },
-              ]}
-            />
-          </Row>
-          {mode === "cloud" && (
-            <Row title="Cloud model" last>
-              <Seg
-                value={sttModel}
-                onChange={setSttModel}
-                options={[
-                  { value: "whisper-large-v3-turbo", label: "Turbo" },
-                  { value: "whisper-large-v3", label: "Large v3" },
-                ]}
-              />
-            </Row>
-          )}
-          {mode !== "cloud" && window.electronAPI && (
+          {/* Transcription is on-device only by design — there is no cloud STT
+              toggle to configure. AI Notes (below) is the cloud-capable part. */}
+          {window.electronAPI && (
             <Row title="Local model" last stack>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%", marginTop: 6 }}>
                 {(() => {

@@ -457,6 +457,17 @@ app.whenReady().then(() => {
         }
       } catch {}
     }
+    // Warm the sidecar the moment engine + weights are both in place. Loading
+    // the 0.6B model takes ~a minute, and a recording started before the socket
+    // exists is the difference between text and silence.
+    if (
+      ["engine-ready", "weights-downloaded"].includes(event) &&
+      st?.engine?.state === "ready" &&
+      st?.weights?.downloaded &&
+      !st?.server?.running
+    ) {
+      parakeet.ensureServer().catch(() => {});
+    }
   });
 
   ipcMain.handle("parakeet:status", () => parakeet.status());

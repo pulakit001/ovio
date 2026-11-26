@@ -1301,6 +1301,7 @@ export default function MacNoteTaker({
     interim,
     isTranscribing,
     activeEngine,
+    enginePending,
     error: speechError,
     start: startTranscription,
     stop: stopTranscription,
@@ -1327,9 +1328,12 @@ export default function MacNoteTaker({
       ? "Local · Parakeet-TDT v3 (streaming)"
       : activeEngine === "whisper-large"
         ? "Local · Whisper Large v3"
-        : activeEngine === "cloud"
-          ? "Cloud · Groq Whisper"
-          : "";
+        : "";
+  // The first Parakeet load after launch takes ~a minute. Saying "Listening…"
+  // with an empty panel made it look broken; name what is actually happening.
+  const listeningLabel = enginePending
+    ? "Loading the local model — this first start takes up to a minute…"
+    : `Listening…${engineLabel ? ` — ${engineLabel}` : ""}`;
 
   useEffect(() => {
     if (!navProjectId) return;
@@ -2617,7 +2621,7 @@ export default function MacNoteTaker({
                 {tab === "transcript" && (
                   transcript.length === 0 && notes.length === 0 && !interim ? (
                     <div style={{ fontSize: 13, color: COLORS.textTertiary, marginTop: 12, lineHeight: 1.6, animation: "ovioTabIn 280ms ease both" }}>
-                      {isRecording ? `Listening…${engineLabel ? ` — ${engineLabel}` : ""}` : "Start recording to see a live transcript here."}
+                      {isRecording ? listeningLabel : "Start recording to see a live transcript here."}
                     </div>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 0, animation: "ovioTabIn 280ms ease both" }}>
@@ -2663,7 +2667,7 @@ export default function MacNoteTaker({
                         </div>
                       ) : (
                         <div style={{ fontSize: 13, color: COLORS.textTertiary, marginTop: 12, lineHeight: 1.6 }}>
-                          {isRecording ? `Listening…${engineLabel ? ` — ${engineLabel}` : ""}` : "Start recording to see a live transcript here."}
+                          {isRecording ? listeningLabel : "Start recording to see a live transcript here."}
                         </div>
                       )}
                     </div>

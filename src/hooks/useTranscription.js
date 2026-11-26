@@ -1,5 +1,4 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { transcribePcmCloud } from "../services/groqStt";
 import { useSettings } from "../context/SettingsContext";
 
 const SAMPLE_RATE = 16000;
@@ -8,24 +7,27 @@ const OVERLAP_MS = 1000; // audio re-sent with the next chunk so boundary words 
 const WINDOW_MS = 2 * 60 * 1000;
 let windowRef = { id: -1 };
 
-// Which STT engine new audio should be routed to, derived LIVE from the current
-// settings. "cloud" = Groq chunks, "whisper" = local whisper chunks,
-// "parakeet" = the native streaming sidecar (local). Used at start() AND when
-// the user flips Transcription Mode / Local STT Model mid-recording.
-function desiredEngineFor(mode, localSttModel) {
-  if ((mode || "local") !== "local") return "cloud";
+// Which local STT engine new audio should be routed to, derived LIVE from the
+// settings: "whisper" = chunked on-device Whisper, "parakeet" = the native
+// streaming sidecar. Transcription is always local — audio never leaves the
+// machine. Used at start() AND when the Local STT Model changes mid-recording.
+function desiredEngineFor(localSttModel) {
   return (localSttModel || "large") === "parakeet" ? "parakeet" : "whisper";
 }
 
 export default function useTranscription() {
-  const { settings, getActiveGroqKeys } = useSettings();
+  const { settings } = useSettings();
   const [transcript, setTranscript] = useState([]);
   const [interim, setInterim] = useState("");
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [error, setError] = useState("");
   // Which STT engine is actually producing text right now:
-  // "parakeet" | "whisper-large" | "cloud" | null (idle / unknown yet).
+  // "parakeet" | "whisper-large" | null (idle / unknown yet).
   const [activeEngine, setActiveEngine] = useState(null);
+  // True while a recording is waiting for the Parakeet sidecar to boot (the
+  // first model load after launch takes ~1 minute). The UI says so instead of
+  // claiming it is "listening" and showing nothing.
+  const [enginePending, setEnginePending] = useState(false);
 
   const audioCtxRef = useRef(null);
   const streamRef = useRef(null);
@@ -42,8 +44,6 @@ export default function useTranscription() {
   // from a stale render closure. These refs hold the current snapshot, and
   // targetRef tracks which engine OWNS new audio right now.
   const settingsRef = useRef(settings);
-  const keysRef = useRef(getActiveGroqKeys);
-  keysRef.current = getActiveGroqKeys;
   const targetRef = useRef("whisper");
   useEffect(() => { settingsRef.current = settings; }, [settings]);
 
@@ -51,6 +51,8 @@ export default function useTranscription() {
   const wsRef = useRef(null);            // live WebSocket to the sidecar
   const parakeetActiveRef = useRef(false); // true while the WS path owns audio
   const pkQueueRef = useRef([]);         // audio buffered until the WS opens
+  const pkStartingRef = useRef(null);    // in-flight sidecar boot (ensureServer)
+  const pumpFnRef = useRef(null);        // pump() is defined below stop()
   const PK_FLUSH_TIMEOUT_MS = 15000;
 
   const clearInterim = useCallback(() => setInterim(""), []);
@@ -75,6 +77,8 @@ export default function useTranscription() {
     }
     parakeetActiveRef.current = false;
     pkQueueRef.current = [];
+    pkStartingRef.current = null;
+    setEnginePending(false);
     bufferRef.current = new Float32Array(0);
   }, []);
 
@@ -107,19 +111,51 @@ export default function useTranscription() {
       const ep = await api.ensureServer();
       if (!ep?.port) return false;
 
-      const ws = new WebSocket(`ws://127.0.0.1:${ep.port}/stream`);
-      ws.binaryType = "arraybuffer";
+      // The sidecar announces its port a beat before uvicorn accepts on it, so
+      // a single immediate connect can lose a race on a cold start. Retry a
+      // couple of times instead of silently dropping to Whisper.
+      let ws = null;
+      let lastErr = null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        ws = new WebSocket(`ws://127.0.0.1:${ep.port}/stream`);
+        ws.binaryType = "arraybuffer";
+        wsRef.current = ws;
+        try {
+          await new Promise((resolve, reject) => {
+            // ensureServer() already waited for the model to load; 30s covers a
+            // slow loopback handshake without giving up on a busy machine.
+            const t = setTimeout(() => reject(new Error("Parakeet stream timed out")), 30000);
+            ws.onopen = () => { clearTimeout(t); resolve(); };
+            ws.onerror = () => { clearTimeout(t); reject(new Error("Parakeet stream failed to connect")); };
+          });
+          lastErr = null;
+          break;
+        } catch (err) {
+          lastErr = err;
+          try { ws.close(); } catch {}
+          wsRef.current = null;
+          if (!runningRef.current || attempt === 2) throw err;
+          await new Promise((resolve) => setTimeout(resolve, 800));
+        }
+      }
+      if (!ws || lastErr) throw lastErr || new Error("Parakeet stream failed to connect");
       wsRef.current = ws;
-
-      await new Promise((resolve, reject) => {
-        const t = setTimeout(() => reject(new Error("Parakeet stream timed out")), 10000);
-        ws.onopen = () => { clearTimeout(t); resolve(); };
-        ws.onerror = () => { clearTimeout(t); reject(new Error("Parakeet stream failed to connect")); };
-      });
 
       ws.send(JSON.stringify({ type: "start" }));
       parakeetActiveRef.current = true;
       setActiveEngine("parakeet");
+      setEnginePending(false);
+
+      // Audio captured while the sidecar was still booting sat on the Whisper
+      // chunk buffer (the socket did not exist yet). Hand it to the stream
+      // FIRST — otherwise the opening minutes of a recording are silently
+      // dropped, which is exactly what "recording but no transcript" looked
+      // like on the first take after a fresh install.
+      const earlier = bufferRef.current;
+      bufferRef.current = new Float32Array(0);
+      if (earlier && earlier.length) {
+        try { ws.send(new Float32Array(earlier).buffer); } catch {}
+      }
 
       // Audio that arrived while the socket was opening.
       const queued = pkQueueRef.current;
@@ -196,10 +232,31 @@ export default function useTranscription() {
   }, []);
 
   const stop = useCallback(async () => {
+    // A session stopped while the sidecar was still loading used to throw the
+    // audio away entirely: no socket, no fallback has caught up yet, nothing
+    // written. Wait (bounded) for a pending boot, then flush — tryStartParakeet
+    // has already sent the buffered audio by the time its promise resolves.
+    if (!parakeetActiveRef.current && targetRef.current === "parakeet" && pkStartingRef.current) {
+      try {
+        await Promise.race([
+          pkStartingRef.current,
+          new Promise((resolve) => setTimeout(resolve, 60000)),
+        ]);
+      } catch {}
+    }
     // Flush the Parakeet tail BEFORE tearing anything down, so the last
     // segment lands in the transcript.
     if (parakeetActiveRef.current) {
       try { await flushParakeet(); } catch {}
+    } else if (targetRef.current !== "parakeet") {
+      // Whisper: the <5s tail still sitting in the buffer would otherwise be
+      // dropped the moment the ticker is cleared.
+      const tail = bufferRef.current;
+      if (tail && tail.length) {
+        bufferRef.current = new Float32Array(0);
+        queueRef.current.push(tail);
+        await pumpFnRef.current?.();
+      }
     }
     runningRef.current = false;
     queueRef.current = [];
@@ -216,26 +273,14 @@ export default function useTranscription() {
       // Read settings/K-eys live so a mid-recording Mode switch is honored by
       // every chunk, even though this callback is memoized across renders.
       const s = settingsRef.current || {};
-      const mode = s.mode || "local";
-      const useCloud = mode === "cloud" || !window.electronAPI;
-      const groqKeys = keysRef.current();
       // (Voice-profile biasing was removed from Settings — no per-user prompt.)
 
       try {
         let text = "";
         const localModel = s.localSttModel === "parakeet" ? "large" : (s.localSttModel || "large");
-        if (useCloud) {
-          if (!groqKeys[0]?.key) throw new Error("No Groq key for cloud transcription");
-          // Rotate across every active key; transcribePcmCloud retries 429s.
-          setActiveEngine("cloud");
-          text = await transcribePcmCloud(chunk, groqKeys, {
-            model: s.sttModel || "whisper-large-v3-turbo",
-          });
-        } else {
-          // Local mode: on-device Whisper only — audio never leaves the Mac.
-          setActiveEngine("whisper-large");
-          text = await window.electronAPI.transcribePcm(chunk, localModel);
-        }
+        // On-device Whisper only — transcription never leaves the Mac.
+        setActiveEngine("whisper-large");
+        text = await window.electronAPI.transcribePcm(chunk, localModel);
 
         if (runningRef.current && text) {
           appendFinal(text);
@@ -281,6 +326,7 @@ export default function useTranscription() {
       pumpRef.current = false;
     }
   }, [transcribeChunk]);
+  pumpFnRef.current = pump;
 
   const tick = useCallback(() => {
     if (!runningRef.current) return;
@@ -369,7 +415,7 @@ export default function useTranscription() {
   // Watch settings and hand the audio pipeline to the newly selected engine.
   useEffect(() => {
     const s = settingsRef.current || {};
-    const desired = desiredEngineFor(s.mode, s.localSttModel);
+    const desired = desiredEngineFor(s.localSttModel);
     const prev = targetRef.current;
     targetRef.current = desired;
     if (!runningRef.current || !prev || prev === desired) return;
@@ -389,8 +435,7 @@ export default function useTranscription() {
     windowRef.current = { id: -1 };
     pkQueueRef.current = [];
 
-    const mode = settingsRef.current?.mode || "local";
-    const desired = desiredEngineFor(mode, settingsRef.current?.localSttModel);
+    const desired = desiredEngineFor(settingsRef.current?.localSttModel);
     targetRef.current = desired;
     const wantParakeet = desired === "parakeet";
 
@@ -445,8 +490,16 @@ export default function useTranscription() {
       setInterim("");
 
       if (wantParakeet) {
-        const ok = await tryStartParakeet();
+        setEnginePending(true);
+        pkStartingRef.current = tryStartParakeet();
+        let ok = false;
+        try {
+          ok = await pkStartingRef.current;
+        } finally {
+          pkStartingRef.current = null;
+        }
         if (ok) return; // the WS path owns everything now
+        setEnginePending(false);
         console.warn("[ovio] Falling back to Whisper chunk pipeline");
       }
       tickerRef.current = setInterval(tick, 500);
@@ -476,6 +529,7 @@ export default function useTranscription() {
     isTranscribing,
     error,
     activeEngine,
+    enginePending,
     start,
     stop,
     clearInterim,

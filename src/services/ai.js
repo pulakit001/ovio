@@ -66,8 +66,15 @@ export async function completeWithFallback(groqKeys, openrouterKeys, messages, o
       result = cloudResult;
     } else if (cloudConfigured) {
       throw new Error(errors.length ? errors.join("\n") : "All cloud API keys failed");
-    } else {
+    } else if (ollama?.url || ollama?.model) {
+      // No keys at all, but Ollama is configured: local notes still work.
       result = await tryOllama();
+    } else {
+      // Say what to do, instead of surfacing a provider-level Ollama error for
+      // a key the user never claimed to have.
+      throw new Error(
+        "No AI key yet — add a Groq or OpenRouter key in Settings → API Keys (or point Ovio at Ollama) to generate notes."
+      );
     }
   }
 

@@ -391,9 +391,19 @@ def main() -> int:
         print(json.dumps({"event": "fatal", "message": "model failed to load"}), flush=True)
         return 1
 
-    # Bind first so the parent process learns the real port even with --port 0.
+    # Import uvicorn BEFORE announcing readiness: the import costs about a
+    # second, and the renderer connects the moment it sees the ready line. The
+    # old order printed first, so the first WebSocket hit a port with nothing
+    # listening yet, failed instantly, and the app fell back to a Whisper model
+    # that may not be installed — a recording that produced no transcript.
+    import uvicorn
+
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind(("127.0.0.1", ARGS.port))
+    # Listen before announcing so a connecting client always finds a listener;
+    # asyncio's create_server(sock=...) adjusts the backlog itself.
+    sock.listen(64)
     port = sock.getsockname()[1]
 
     print(json.dumps({
@@ -405,7 +415,6 @@ def main() -> int:
         "pid": os.getpid(),
     }), flush=True)
 
-    import uvicorn
     config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning", loop="asyncio")
     server = uvicorn.Server(config)
     server.run(sockets=[sock])
