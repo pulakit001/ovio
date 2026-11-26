@@ -32,6 +32,14 @@ function applyWindowsTitleBar() {
     console.warn("[ovio] Could not update title bar overlay:", err.message);
   }
 }
+
+function removeWindowMenu(win) {
+  if (process.platform === "darwin" || !win || win.isDestroyed()) return;
+  Menu.setApplicationMenu(null);
+  win.removeMenu();
+  win.setAutoHideMenuBar(false);
+  win.setMenuBarVisibility(false);
+}
 const LOGO_PATH = path.join(__dirname, "..", "logo.png");
 const DOCK_ICON = path.join(__dirname, "..", "build", "icon", "icon_1024.png");
 const DOCK_ICON_DARK = path.join(__dirname, "..", "build", "icon", "icon_dark_1024.png");
@@ -68,7 +76,8 @@ function createWindow() {
     // Belt-and-braces against the default Electron menu: on Windows/Linux a
     // menu bar would add a whole "File Edit View Window Help" row above the
     // app's own header. macOS keeps its app menu for standard shortcuts.
-    autoHideMenuBar: true,
+    autoHideMenuBar: false,
+    menuBarVisible: false,
     icon: LOGO_PATH,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
@@ -86,14 +95,12 @@ function createWindow() {
   // Explicitly strip the menu from THIS window too (Menu.setApplicationMenu
   // only applies to windows that ask for the app menu) so no platform or
   // future default can bring the bar back, not even on Alt.
-  if (process.platform !== "darwin") {
-    mainWindow.setMenu(null);
-    mainWindow.setMenuBarVisibility(false);
-  }
+  removeWindowMenu(mainWindow);
 
   // When the main window is ready, show it — the in-app entrance animation
   // (App.jsx EntranceVeil) takes it from there.
   mainWindow.once("ready-to-show", () => {
+    removeWindowMenu(mainWindow);
     mainWindow.show();
     mainWindow.focus();
   });

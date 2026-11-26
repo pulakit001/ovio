@@ -76,6 +76,10 @@ jobs:
               || { echo "::error::default Electron menu removal missing from packaged main.cjs ($token)."; exit 1; }
           done
           echo "✔ default Electron menu is stripped from the packaged app."
+          # The app owns its navigation and must not reveal Electron's
+          # File/Edit/View/Window/Help menu on Windows.
+          ! grep -qiE 'Menu\.setApplicationMenu\([^n]|setMenu\([^n]|setMenuBarVisibility\(true' electron/main.cjs \
+            || { echo "::error::default Electron menu can be restored on Windows"; exit 1; }
           # The local GGUF runtime is a native Electron-main-process module.
           # Its platform addon must be unpacked so local AI notes work without an external daemon.
           find release/win-unpacked -name "llama-addon.node" | tr -d '\r' | grep -q "win-x64" \
