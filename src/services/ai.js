@@ -53,9 +53,10 @@ export async function askQuestion(keys, transcriptLines, notesText, question, hi
   return (await run(keys, [...(history || []).slice(-8), { role: "user", content: `${context}\n\nQuestion: ${question}\n\nAnswer only from the provided material. Say when the answer is not present.` }], { system: "You answer questions accurately from a user's meeting notes. Be specific and concise.", maxTokens: 1600, temperature: 0.2 })).text;
 }
 export function hasApiKey(keys) { return !!keys?.openrouterKeys?.some((key) => key?.key); }
-export async function askLibrary(keys, question, recordings) {
-  const source = (recordings || []).slice(0, 40).map((recording, index) => `[${index + 1}] ${recording.label || "Untitled"}\n${textFromLines(recording.transcript)}\n${recording.aiNotes || ""}`).join("\n\n");
-  const result = await run(keys, [{ role: "user", content: `LIBRARY:\n${source}\n\nQuestion: ${question}\n\nAnswer from the library only. Cite relevant recordings as [number].` }], { system: "You are a precise personal knowledge assistant. Never invent citations.", maxTokens: 1800, temperature: 0.2 });
-  return { text: result.text, sources: (recordings || []).slice(0, 40).map((recording, index) => ({ n: index + 1, id: recording.id, label: recording.label || "Untitled" })) };
+export async function askLibrary(keys, question, recordings, workspace = "") {
+  const source = (recordings || []).slice(0, 40).map((recording, index) => `[${index + 1}] ${recording.label || "Untitled"}\nPROJECT: ${recording.project || "General Folder"}${recording.folder ? ` / ${recording.folder}` : ""}\n${textFromLines(recording.transcript)}\n${recording.aiNotes || ""}`).join("\n\n");
+  const workspaceSection = workspace ? `\n\nWORKSPACE INDEX (use this only for project, folder and file names):\n${workspace}` : "";
+  const result = await run(keys, [{ role: "user", content: `LIBRARY:\n${source}${workspaceSection}\n\nQuestion: ${question}\n\nAnswer from the library only. Cite relevant recordings as [number]. If the answer is not present, say so plainly.` }], { system: "You are a precise personal knowledge assistant. Never invent citations, details or files.", maxTokens: 1800, temperature: 0.2 });
+  return { text: result.text, sources: (recordings || []).slice(0, 40).map((recording, index) => ({ n: index + 1, id: recording.id, pid: recording.pid, sid: recording.sid, label: recording.label || "Untitled" })) };
 }
 export function getModel() { return { localContextTokens: LOCAL_CONTEXT_TOKENS }; }

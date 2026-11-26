@@ -6,15 +6,10 @@ const crypto = require("crypto");
 const SETTINGS_FILE = () => path.join(app.getPath("userData"), "ovio-settings.json");
 const MASTER_KEY_FILE = () => path.join(app.getPath("userData"), "ovio.key");
 
-// The user-facing ambient chords. An empty persisted list must never happen:
-// it would leave only the ⌘⇧U safety chord working. Exported so main.cjs can
-// heal a wiped list back to these.
-const AMBIENT_DEFAULT_CHORDS = ["CommandOrControl+Shift+Space", "Alt+Shift+Space"];
-
 const DEFAULT_SETTINGS = {
   // Bumped when a default changes so existing settings files can migrate once
   // without overriding choices made after that migration.
-  settingsVersion: 3,
+  settingsVersion: 4,
   mode: "local",
   localSttModel: "parakeet",
   // One-time flag: when the Parakeet engine finishes installing we promote it
@@ -31,8 +26,6 @@ const DEFAULT_SETTINGS = {
   },
   aiProvider: "cloud",
   localLlmModel: "qwen2.5-3b",
-  // ---- Ambient global shortcut (record from anywhere) ----
-  ambient: { enabled: true, chords: AMBIENT_DEFAULT_CHORDS },
   // ---- UI animation level ----
   // "full" = everything; "reduced" = transitions only, no loops/pulses;
   // "off" = instant switches, no motion at all.
@@ -199,6 +192,13 @@ function migrateParsed(parsed) {
     if (out.localSttModel !== "parakeet") out.localSttModel = "parakeet";
     migrated = true;
   }
+  // v4 removes the global instant-recording hotkey and its background panel.
+  // Drop the old setting so it cannot be accidentally revived by a later UI.
+  if (!parsed.settingsVersion || parsed.settingsVersion < 4) {
+    out.settingsVersion = 4;
+    delete out.ambient;
+    migrated = true;
+  }
   // Transcription is strictly Local or Cloud: legacy "hybrid" behaved as
   // local-first, so it maps to "local". The AI-notes provider legacy value
   // The prior external local-provider selection maps to Ovio's in-app runtime.
@@ -354,4 +354,4 @@ function registerSettingsIpc({ onChange } = {}) {
   ipcMain.handle("settings:set", handleUpdate);
 }
 
-module.exports = { registerSettingsIpc, loadSettings, getPlainSettings, sanitizeForRenderer, persistSettings, AMBIENT_DEFAULT_CHORDS };
+module.exports = { registerSettingsIpc, loadSettings, getPlainSettings, sanitizeForRenderer, persistSettings };

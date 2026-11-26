@@ -1195,7 +1195,6 @@ export default function MacNoteTaker({
   onRecordingStatus,
   ambientSignal,
   onAmbientStatus,
-  ambientShortcutLabel,
   vaultBySub,
   setVaultBySub,
 }) {
@@ -2415,7 +2414,7 @@ export default function MacNoteTaker({
                 >
                   <Layers size={13} /> Combine Notes
                 </button>
-                <button onClick={createRecording} title={ambientShortcutLabel ? `Tip: press ${ambientShortcutLabel} anywhere on your Mac to start an ambient recording` : undefined} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: CTA.bg, color: CTA.fg, fontSize: 12.5, fontWeight: 500, borderRadius: 999, padding: "7px 14px", cursor: "pointer", transition: "transform 120ms ease, background 160ms ease" }}
+                <button onClick={createRecording} title="Start a new recording" style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: CTA.bg, color: CTA.fg, fontSize: 12.5, fontWeight: 500, borderRadius: 999, padding: "7px 14px", cursor: "pointer", transition: "transform 120ms ease, background 160ms ease" }}
                   onMouseEnter={(e) => { e.currentTarget.style.background = CTA.bgHover; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = CTA.bg; }}>
                   <Mic size={13} /> New Recording

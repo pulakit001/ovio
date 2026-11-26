@@ -51,7 +51,7 @@ const TOUR_STEPS = [
     view: "dashboard",
     target: '[data-tour="record"]',
     title: "Start recording",
-    body: "One click opens the recorder. A global shortcut can capture a thought from any app.",
+    body: "One click opens the recorder, where you can start a new recording.",
   },
   {
     view: "dashboard",
@@ -75,7 +75,7 @@ const TOUR_STEPS = [
     view: "recorder",
     target: '[data-tour="recorder-sidebar"]',
     title: "The recorder's source list",
-    body: "Projects and folders sit on the left. The General Folder catches quick recordings made with the global shortcut.",
+    body: "Projects and folders sit on the left. The General Folder keeps your quick recordings together.",
   },
   {
     view: "recorder",
@@ -150,34 +150,6 @@ function AppShell() {
       writeStore("vault", next);
       return next;
     });
-  }, []);
-
-  // Ambient recording: commands arrive from the floating popup (gestured by
-  // the global shortcut in the main process) and are forwarded to the recorder.
-  const [ambientSignal, setAmbientSignal] = useState(null);
-  // Chords actually registered in the main process (announced over IPC) so the
-  // UI can show the shortcut that really works, even after a fallback.
-  const [ambientShortcutLabel, setAmbientShortcutLabel] = useState("");
-  useEffect(() => {
-    if (!window.electronAPI?.ambient?.onCommand) return;
-    const off = window.electronAPI.ambient.onCommand((cmd) => {
-      setAmbientSignal((s) => ({ cmd, ts: (s?.ts || 0) + 1 }));
-    });
-    // Announce readiness so a shortcut pressed during the splash screen is
-    // replayed instead of silently dropped by the startup race.
-    window.electronAPI.ambient.ready?.();
-    const offShortcut = window.electronAPI.ambient.onShortcut?.((info) => {
-      setAmbientShortcutLabel(info?.label || "");
-    });
-    return () => {
-      off?.();
-      offShortcut?.();
-    };
-  }, []);
-
-  // Live status feed back to the popup (recording / paused / off + label).
-  const forwardAmbientStatus = useCallback((status) => {
-    window.electronAPI?.ambient?.status?.(status);
   }, []);
 
   // Keep local UI state in sync with persisted settings once loaded.
@@ -497,7 +469,6 @@ button:focus-visible { outline: 2px solid rgba(198,245,95,0.42); outline-offset:
           onImport={() => { setImportRef((r) => r || document.createElement("input")); if (importRef) { importRef.type = "file"; importRef.accept = ".json"; importRef.onchange = (e) => { const f = e.target.files?.[0]; if (f) importData(f); }; importRef.click(); } }}
           onClearAll={clearAll}
           onKeysChanged={refresh}
-          ambientShortcutLabel={ambientShortcutLabel}
           onReplayTour={() => setTourOpen(true)}
         />
       )}
@@ -519,6 +490,7 @@ button:focus-visible { outline: 2px solid rgba(198,245,95,0.42); outline-offset:
             <Dashboard
               projects={projects}
               recordingsBySub={recordingsBySub}
+              vaultBySub={vaultBySub}
               onClearAll={clearAll}
               onOpenRecorder={openRecorder}
               onOpenSearch={openSearch}
@@ -536,6 +508,10 @@ button:focus-visible { outline: 2px solid rgba(198,245,95,0.42); outline-offset:
                 setNavSubprojectId(sid);
                 setNavRecordingId(null);
                 openRecorder();
+              }}
+              onNavigate={(target) => {
+                if (target === "recorder") openRecorder();
+                else setView(target);
               }}
             />
           </div>
@@ -559,9 +535,6 @@ button:focus-visible { outline: 2px solid rgba(198,245,95,0.42); outline-offset:
             clearNavRecording={() => setNavRecordingId(null)}
             onNavigateToDashboard={() => setView("dashboard")}
             onRecordingStatus={setRecStatus}
-            ambientSignal={ambientSignal}
-            onAmbientStatus={forwardAmbientStatus}
-            ambientShortcutLabel={ambientShortcutLabel}
             vaultBySub={vaultBySub}
             setVaultBySub={setVaultBySub}
           />

@@ -43,8 +43,6 @@ export function SettingsProvider({ children }) {
           openrouterKeys: s.openrouterKeys || [],
           aiProvider: s.aiProvider || "cloud",
           localLlmModel: s.localLlmModel || "qwen2.5-3b",
-          // New backend-backed settings surfaces (Settings tab).
-          ambient: s.ambient || { enabled: true, chords: ["CommandOrControl+Shift+Space", "Alt+Shift+Space"] },
           animations: s.animations || "full",
           theme: s.theme || "light",
           aiBehavior: normalizeAiBehavior(s.aiBehavior),

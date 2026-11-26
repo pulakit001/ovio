@@ -1,7 +1,7 @@
-const { app, BrowserWindow, ipcMain, session, globalShortcut, screen, dialog, shell, Menu, nativeTheme } = require("electron");
+const { app, BrowserWindow, ipcMain, session, screen, dialog, shell, Menu, nativeTheme } = require("electron");
 const path = require("path");
 const fs = require("fs");
-const { registerSettingsIpc, loadSettings, persistSettings, AMBIENT_DEFAULT_CHORDS } = require("./settings.cjs");
+const { registerSettingsIpc, loadSettings, persistSettings } = require("./settings.cjs");
 const parakeet = require("./parakeet.cjs");
 const localLlm = require("./local-llm.cjs");
 const { startUpdater, stopUpdater } = require("./updater.cjs");
@@ -55,10 +55,9 @@ let panelEditing = false;
 // Cached interactive state so the poll only calls setIgnoreMouseEvents on
 // change instead of every tick.
 let panelInteractive = false;
-// Global-shortcut state: every chord we successfully own, a retry timer for
-// when the OS refuses them all at startup, and the handoff to the renderer.
+// Retired ambient-panel state retained only for update compatibility. No
+// system shortcut is registered and the panel is never created.
 const ambientShortcuts = new Set();
-let shortcutRetryTimer = null;
 let lastShortcutAnnouncement = { keys: [], label: "" };
 let rendererReady = false;        // main renderer announced it can receive commands
 let pendingAmbientCommand = null; // shortcut fired before the renderer was ready
@@ -461,7 +460,6 @@ app.whenReady().then(() => {
   });
 
   createWindow();
-  createPanelWindow(); // pre-warm the ambient pill — no black first paint, instant popup
 
   // Global shortcut → floating ambient recorder, working from ANY app.
   // Chords come from settings (ambient: { enabled, chords }) so the Settings
@@ -492,52 +490,10 @@ app.whenReady().then(() => {
   // rebind=true (Settings changed) drops the old chords first; the safety
   // chord always survives so recording can never be locked out. enabled=false
   // removes everything — the feature is off, nothing may fire.
-  const applyAmbientConfig = (config, { rebind = false } = {}) => {
-    const enabled = config?.enabled !== false;
-    if (rebind) {
-      for (const acc of [...ambientShortcuts]) {
-        try { globalShortcut.unregister(acc); } catch {}
-      }
-      ambientShortcuts.clear();
-      if (!enabled) {
-        console.log("[ovio] Ambient shortcut disabled");
-        announceShortcutKeys();
-        return { ok: true, registered: [], missing: [] };
-      }
-    }
-    const added = [];
-    const missing = [];
-    for (const acc of [...(config?.chords || []), SAFETY_CHORD]) {
-      if (ambientShortcuts.has(acc)) continue;
-      try {
-        if (globalShortcut.register(acc, () => onAmbientShortcut(acc))) {
-          ambientShortcuts.add(acc);
-          added.push(acc);
-        } else {
-          missing.push(acc);
-        }
-      } catch {
-        missing.push(acc); // owned by another app
-      }
-    }
-    if (added.length) console.log(`[ovio] Ambient shortcut registered: ${added.join(", ")}`);
-    if (missing.length) console.warn(`[ovio] Ambient chords taken by other apps: ${missing.join(", ")}`);
-    // Known chord-eaters: apps running a CGEventTap (Wispr Flow, Superwhisper,
-    // etc.) can swallow a chord BEFORE our Carbon-level hotkey ever fires —
-    // register() succeeds but the callback never runs. Name the suspect so
-    // "registered but dead" is diagnosable from the log alone.
-    try {
-      const { execSync } = require("child_process");
-      const ps = execSync("ps -axo comm= 2>/dev/null", { timeout: 1500 }).toString();
-      for (const app of ["Wispr Flow", "Superwhisper", "MacWhisper", "Audionotes"]) {
-        if (ps.includes(app)) {
-          console.warn(`[ovio] ⚠️ "${app}" is running — its event tap may swallow global shortcuts. If presses do nothing, quit it or pick a different chord in Settings.`);
-        }
-      }
-    } catch {}
-    announceShortcutKeys();
-    return { ok: ambientShortcuts.size > 0, registered: [...ambientShortcuts], missing };
-  };
+  // Global instant-recording hotkeys are intentionally retired. Keeping this
+  // inert compatibility function means a stale renderer cannot re-register a
+  // system shortcut while existing installs update.
+  const applyAmbientConfig = () => ({ ok: true, registered: [], missing: [] });
   const registerAmbientShortcuts = () => {
     const s = loadSettings().ambient || {};
     // Runtime registration uses the WIDENED candidate list (every saved chord
@@ -546,41 +502,6 @@ app.whenReady().then(() => {
     // running. applyAmbientConfig de-dupes.
     return applyAmbientConfig({ enabled: s.enabled !== false, chords: shortcutCandidates });
   };
-  registerAmbientShortcuts();
-  // macOS: Electron's global shortcuts can be silently stolen back after the
-  // app loses focus (other apps claim the chord while we're in background) —
-  // the "works inside the app, dead everywhere else" report. Re-grab on every
-  // focus gain; re-registering an owned chord is a no-op.
-  app.on("browser-window-focus", () => {
-    if (ambientShortcuts.size === 0) registerAmbientShortcuts();
-  });
-  if (ambientShortcuts.size === 0 && !shortcutRetryTimer) {
-    // Every chord was taken at startup (e.g. a foreground app claimed one
-    // before us). Keep trying quietly instead of giving up forever.
-    console.warn("[ovio] No ambient shortcut yet — retrying every 15s");
-    shortcutRetryTimer = setInterval(() => {
-      registerAmbientShortcuts();
-      if (ambientShortcuts.size > 0) {
-        clearInterval(shortcutRetryTimer);
-        shortcutRetryTimer = null;
-      }
-    }, 15000);
-  }
-
-  // ----- Ambient shortcut control (Settings tab) -----
-  // Validate accelerators conservatively but correctly: one or more modifiers
-  // plus a key token (letter, digit, Space, punctuation). The previous regex
-  // rejected EVERY valid chord (broken `(\+.)+\+?` group), silently killing
-  // presets and custom capture — the root cause of "choosing the shortcut
-  // does not work at all".
-  const CHORD_RE = /^(CommandOrControl|Command|Control|CmdOrCtrl|Alt|AltGr|Option|Shift|Super)(\+(CommandOrControl|Command|Control|CmdOrCtrl|Alt|AltGr|Option|Shift|Super))*\+\S{1,12}$/;
-  const isValidChord = (c) =>
-    typeof c === "string" &&
-    c.length <= 64 &&
-    CHORD_RE.test(c) &&
-    // At least one non-Shift modifier: ⇧Space alone is not a usable global
-    // chord, and Shift-only chords collide with normal typing.
-    /(CommandOrControl|Command|Control|CmdOrCtrl|Alt|AltGr|Option|Super)/.test(c);
   // ---------------- Vault: per-folder file attachments ----------------
   // Files the user attaches to a subfolder are copied into the app's userData
   // directory (files/<folderId>/<id>-<name>) so they survive the original
@@ -683,97 +604,6 @@ app.whenReady().then(() => {
       shell.openExternal(url);
     }
   });
-  ipcMain.handle("ambient:configure", (_event, config) => {
-    const s = loadSettings();
-    const previous = Array.isArray(s.ambient?.chords) ? s.ambient.chords : [];
-    const incoming = Array.isArray(config?.chords)
-      ? config.chords.filter(isValidChord)
-      : previous;
-    // Self-heal: a toggle-only update ({enabled:false} or a stale renderer
-    // state) must never wipe the user's chords — an empty list would leave
-    // only the safety chord working. Fall back to what was there (or defaults).
-    const chords = incoming.length > 0 ? incoming : (previous.length > 0 ? previous : [...AMBIENT_DEFAULT_CHORDS]);
-    const ambient = {
-      enabled: config?.enabled !== undefined ? !!config.enabled : s.ambient?.enabled !== false,
-      chords,
-    };
-    persistSettings({ ...s, ambient });
-    const result = applyAmbientConfig(ambient, { rebind: true });
-    console.log(`[ovio] ambient:configure → enabled=${ambient.enabled} chords=[${ambient.chords.join(', ')}] registered=[${result.registered.join(', ')}]`);
-    return result;
-  });
-  ipcMain.handle("ambient:getInfo", () => {
-    const s = loadSettings().ambient || {};
-    return {
-      enabled: s.enabled !== false,
-      chords: s.chords || [],
-      registered: [...ambientShortcuts],
-      label: lastShortcutAnnouncement.label,
-      shortLabel: lastShortcutAnnouncement.shortLabel || "",
-    };
-  });
-  // In-app "start recording" button (welcome screen) — same as the hotkey:
-  // always a fresh popup + a brand-new session.
-  ipcMain.on("ambient:trigger", () => {
-    springPanelIn();
-    dispatchAmbientCommand("record");
-  });
-
-  // Panel window buttons → commands for the main renderer.
-  ipcMain.on("ambient:panel", (_event, cmd) => {
-    // The panel can send plain command strings (pause/done/…) or objects:
-    // { cmd: "rename", name } from its editable title field, or
-    // { cmd: "editing", value } while the title field is focused.
-    if (cmd && typeof cmd === "object" && cmd.cmd === "rename") {
-      const name = String(cmd.name || "").trim().slice(0, 120);
-      if (name) dispatchAmbientCommand({ cmd: "rename", name });
-      return;
-    }
-    if (cmd && typeof cmd === "object" && cmd.cmd === "editing") {
-      panelEditing = !!cmd.value;
-      if (panelEditing && panelWindow && !panelWindow.isDestroyed()) {
-        panelWindow.setIgnoreMouseEvents(false);
-        panelInteractive = true;
-      }
-      return;
-    }
-    if (cmd === "close") { hidePanel(); return; }
-    if (cmd === "open") {
-      // Click on the popup → jump to that recording in the Ovio window.
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        if (mainWindow.isMinimized()) mainWindow.restore();
-        mainWindow.show();
-        mainWindow.focus();
-      }
-      dispatchAmbientCommand({ cmd: "open" });
-      return;
-    }
-    dispatchAmbientCommand(cmd);
-  });
-
-  // The renderer announces it can receive ambient commands. Any shortcut press
-  // that happened during splash/startup is replayed here so the very first
-  // hotkey is never swallowed by the load race.
-  ipcMain.on("ambient:ready", (event) => {
-    if (event.sender !== mainWindow?.webContents) return;
-    rendererReady = true;
-    if (lastShortcutAnnouncement.label) {
-      mainWindow.webContents.send("ambient:shortcut", lastShortcutAnnouncement);
-    }
-    if (pendingAmbientCommand) {
-      const { cmd, at } = pendingAmbientCommand;
-      pendingAmbientCommand = null;
-      if (Date.now() - at < 10000) {
-        mainWindow.webContents.send("ambient:command", cmd);
-      }
-    }
-  });
-
-  // Main renderer → live recording state for the floating panel.
-  ipcMain.on("ambient:status", (_event, state) => {
-    sendToPanel("ambient:state", state);
-  });
-
   // Pre-warm the sidecar if Parakeet is the selected (or defaulted) model.
   if (loadSettings().localSttModel === "parakeet") {
     parakeet
@@ -788,8 +618,6 @@ app.on("before-quit", () => {
   localLlm.dispose();
   parakeet.stopServer();
   destroyPanel();
-  if (shortcutRetryTimer) clearInterval(shortcutRetryTimer);
-  globalShortcut.unregisterAll();
 });
 
 app.on("window-all-closed", () => {

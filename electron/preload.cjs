@@ -40,33 +40,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
       return () => ipcRenderer.removeListener("local-llm:token", listener);
     },
   },
-  // Ambient recording popup (floating panel spawned by the global shortcut):
-  // the main renderer receives commands and reports live status.
-  ambient: {
-    status: (status) => ipcRenderer.send("ambient:status", status),
-    // Tell the main process this page can receive ambient commands; any
-    // shortcut press that fired during startup is replayed in response.
-    ready: () => ipcRenderer.send("ambient:ready"),
-    onCommand: (cb) => {
-      const listener = (_e, cmd) => cb(cmd);
-      ipcRenderer.on("ambient:command", listener);
-      return () => ipcRenderer.removeListener("ambient:command", listener);
-    },
-    // Which chords are actually registered (may differ from the default hint).
-    onShortcut: (cb) => {
-      const listener = (_e, info) => cb(info);
-      ipcRenderer.on("ambient:shortcut", listener);
-      return () => ipcRenderer.removeListener("ambient:shortcut", listener);
-    },
-  },
-  // Settings-tab control surface for the global shortcut: enable/disable,
-  // customize the chords, query live registration info, or start recording
-  // programmatically (welcome-screen CTA).
-  ambientAPI: {
-    configure: (config) => ipcRenderer.invoke("ambient:configure", config),
-    getInfo: () => ipcRenderer.invoke("ambient:getInfo"),
-    trigger: () => ipcRenderer.send("ambient:trigger"),
-  },
   // Vault: per-folder file attachments ("Add Files"). Pick copies files into
   // the app's userData and returns metadata; open/read/remove act on the
   // stored copy by relative path.
@@ -90,21 +63,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
       return () => ipcRenderer.removeListener("updater:message", listener);
     },
     openPage: (url) => ipcRenderer.send("update:openPage", url),
-  },
-  // Control surface exposed to the floating panel window itself.
-  ambientPanel: {
-    send: (cmd) => ipcRenderer.send("ambient:panel", cmd),
-    onState: (cb) => {
-      const listener = (_e, state) => cb(state);
-      ipcRenderer.on("ambient:state", listener);
-      return () => ipcRenderer.removeListener("ambient:state", listener);
-    },
-    // Main process cursor-watch → hover state (drives expand/collapse).
-    onHover: (cb) => {
-      const listener = (_e, h) => cb(h);
-      ipcRenderer.on("ambient:panel-hover", listener);
-      return () => ipcRenderer.removeListener("ambient:panel-hover", listener);
-    },
   },
 });
 

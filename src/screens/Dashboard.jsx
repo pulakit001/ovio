@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { COLORS, CTA, FONT, isLight } from "../ui/theme";
 import { askLibrary } from "../services/ai";
+import { resolveWorkspaceNavigation, workspaceContext } from "../services/workspaceSearch";
 import { useSettings } from "../context/SettingsContext";
 import { PrimaryButton } from "../ui/kit";
 
@@ -600,6 +601,15 @@ const ASK_CATEGORIES = [
       "What changed between my last two recordings?",
     ],
   },
+  {
+    label: "Navigate Ovio",
+    questions: [
+      "Open Settings",
+      "Go to Recorder",
+      "Find my latest recording",
+      "Open a project by name",
+    ],
+  },
 ];
 
 async function fetchAiKeys() {
@@ -670,7 +680,7 @@ function AnswerBody({ text, sources, onCite }) {
   );
 }
 
-function AskPanel({ library, recordingCount, onOpenSearch, onOpenSource }) {
+function AskPanel({ library, recordingCount, workspace, onOpenSearch, onOpenSource, onNavigate }) {
   const light = isLight();
   const [value, setValue] = useState("");
   const [answer, setAnswer] = useState(null);
@@ -690,14 +700,20 @@ function AskPanel({ library, recordingCount, onOpenSearch, onOpenSource }) {
     if (!question) return;
     const id = ++askId.current;
     setValue(question);
+    const destination = resolveWorkspaceNavigation(question, workspace);
+    if (destination) {
+      setAnswer({ question, text: `Opening ${destination.label}${destination.detail ? ` in ${destination.detail}` : ""}…`, sources: [] });
+      setTimeout(() => onNavigate?.(destination), 120);
+      return;
+    }
     if (recordingCount === 0) {
-      setAnswer({ question, text: "Your library is empty right now. Make a recording and I can answer questions about it.", sources: [] });
+      setAnswer({ question, text: "Your library is empty right now. You can still say things like “open Settings” or “go to Recorder.”", sources: [] });
       return;
     }
     setAnswer({ question, loading: true, sources: [] });
     try {
       const keys = await fetchAiKeys();
-      const res = await askLibrary(keys, question, collectRecordings(library));
+      const res = await askLibrary(keys, question, collectRecordings(library), workspace.context);
       if (id !== askId.current) return;
       setAnswer({ question, text: res.text || "I couldn’t find an answer in your recordings.", sources: res.sources || [] });
     } catch (err) {
@@ -778,7 +794,7 @@ function AskPanel({ library, recordingCount, onOpenSearch, onOpenSource }) {
             >
               <div style={{ fontSize: 12.5, color: COLORS.textSecondary, lineHeight: 1.55 }}>
                 Ask in plain language. Ovio reads across <strong style={{ color: COLORS.text, fontWeight: 600 }}>every recording</strong> —
-                transcripts, your notes and AI notes — then cites what it used.
+                transcripts, your notes and AI notes — then cites what it used. You can also say “open Settings,” “go to Recorder,” or “find [a project, recording, or file].”
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14 }}>
                 {ASK_CATEGORIES.map((category) => (
@@ -841,8 +857,8 @@ function AskPanel({ library, recordingCount, onOpenSearch, onOpenSource }) {
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Escape") clear(); }}
-          placeholder="Ask anything about your recordings"
-          aria-label="Ask a question about your recordings"
+          placeholder="Ask, find, or navigate anywhere in Ovio"
+          aria-label="Ask about your library or navigate Ovio"
           style={{ color: COLORS.text }}
         />
         {answer && (
@@ -949,11 +965,13 @@ function collectRecordings(library) {
 export default function Dashboard({
   projects,
   recordingsBySub,
+  vaultBySub,
   onSelectRecording,
   onNavigateToProject,
   onRenameProject,
   onOpenRecorder,
   onOpenSearch,
+  onNavigate,
 }) {
   const library = useMemo(
     () => projects
@@ -995,6 +1013,23 @@ export default function Dashboard({
     [library, generalRecordings]
   );
 
+  const workspace = useMemo(
+    () => ({ projects, recordingsBySub, vaultBySub, context: workspaceContext({ projects, vaultBySub }) }),
+    [projects, recordingsBySub, vaultBySub]
+  );
+  const handleAskNavigation = (destination) => {
+    if (destination.kind === "view") {
+      if (destination.view === "recorder") onOpenRecorder();
+      else onNavigate?.(destination.view);
+      return;
+    }
+    if (destination.kind === "recording") {
+      onSelectRecording(destination.pid, destination.sid, { id: destination.rid });
+      return;
+    }
+    onNavigateToProject(destination.pid, destination.sid);
+  };
+
   // Clicking a project card hands the whole job to the Recorder tab: it owns
   // the folder tree, the live stage and the search/move tools already.
   const openProject = (project) => onNavigateToProject(project.id, null);
@@ -1014,8 +1049,10 @@ export default function Dashboard({
           <AskPanel
             library={askLibraryData}
             recordingCount={recordingCount}
+            workspace={workspace}
             onOpenSearch={onOpenSearch}
             onOpenSource={(src) => onSelectRecording(src.pid, src.sid, { id: src.id })}
+            onNavigate={handleAskNavigation}
           />
           <div
             style={{

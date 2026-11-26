@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import {
   X, Plus, Trash2, Check,
-  Download, Upload, Server, ScrollText, Wand2, Sun, Moon,
+  Download, Upload, Server, ScrollText, Sun, Moon,
 } from "lucide-react";
 import { verifyOpenRouterKey } from "../services/verifyKeys";
 import { FONT, COLORS, RADIUS, TYPE } from "../ui/theme";
@@ -11,37 +11,6 @@ import { useSettings } from "../context/SettingsContext";
 
 function genId() {
   return Math.random().toString(36).slice(2, 10);
-}
-
-// Electron reports "darwin" on macOS — not "mac" (the old check never
-// matched, so macOS users saw Windows-style Ctrl labels).
-const IS_MAC = (window.electronAPI?.platform || navigator.platform || "").toLowerCase().includes("mac") || (window.electronAPI?.platform || "") === "darwin";
-
-// "CommandOrControl+Shift+Space" → "⌘⇧Space" (mac) / "Ctrl+Shift+Space" (win)
-function humanizeOne(chord) {
-  return String(chord || "")
-    .replace("CommandOrControl", IS_MAC ? "⌘" : "Ctrl")
-    .replace("Alt", IS_MAC ? "⌥" : "Alt")
-    .replace("Shift", IS_MAC ? "⇧" : "Shift");
-}
-
-// iOS-style toggle switch used by the ambient shortcut section — blue when
-// on, with a glow (the dark theme's single-accent language).
-function Toggle({ checked, onChange }) {
-  return (
-    <button onClick={() => onChange(!checked)} title={checked ? "Disable" : "Enable"}
-      style={{
-        width: 40, height: 22, borderRadius: 11, border: "none", position: "relative",
-        background: checked ? COLORS.text : COLORS.borderStrong, cursor: "pointer", flexShrink: 0,
-        boxShadow: "none",
-        transition: "background 200ms ease, box-shadow 200ms ease",
-      }}>
-      <div style={{
-        position: "absolute", top: 2, width: 18, height: 18, borderRadius: 999, background: "#fff",
-        left: checked ? 20 : 2, transition: "left 200ms cubic-bezier(.16,1,.3,1)", boxShadow: "0 1px 4px rgba(0,0,0,0.4)",
-      }} />
-    </button>
-  );
 }
 
 // Keyframes + the grouped-list language for the settings page.
@@ -238,16 +207,6 @@ function KeyRow({ entry, provider, onUpdate, onRemove, onToggle, last }) {
   );
 }
 
-// Chord presets offered for the global shortcut. Electron accelerators —
-// editable via the chord recorder below.
-const CHORD_PRESETS = [
-  { id: "CommandOrControl+Shift+Space", label: "⌘/Ctrl + ⇧ + Space" },
-  { id: "Alt+Shift+Space", label: "⌥/Alt + ⇧ + Space" },
-  { id: "CommandOrControl+Alt+Shift+Space", label: "⌘ + ⌥ + ⇧ + Space" },
-  { id: "Alt+Shift+R", label: "⌥/Alt + ⇧ + R" },
-  { id: "CommandOrControl+Shift+7", label: "⌘/Ctrl + ⇧ + 7" },
-];
-
 // The four note sections embedded into every AI note (toggled in
 // Settings → AI Behavior). Each maps to a required "##" section in the prompt.
 const NOTE_SECTIONS = [
@@ -257,7 +216,7 @@ const NOTE_SECTIONS = [
   { id: "followUps", label: "Follow-ups", desc: "Actions, owners, open threads" },
 ];
 
-export default function Settings({ onNavigate, mode, setMode, localSttModel, setLocalSttModel, aiProvider, setAiProvider, localLlmModel, setLocalLlmModel, setFullyLocal, onExport, onImport, onClearAll, onKeysChanged, ambientShortcutLabel, onReplayTour }) {
+export default function Settings({ onNavigate, mode, setMode, localSttModel, setLocalSttModel, aiProvider, setAiProvider, localLlmModel, setLocalLlmModel, setFullyLocal, onExport, onImport, onClearAll, onKeysChanged, onReplayTour }) {
   const { settings: ctxSettings, update: updateSettings } = useSettings();
   const [openrouterKeys, setOpenrouterKeys] = useState([]);
   const [loadingKeys, setLoadingKeys] = useState(true);
@@ -269,11 +228,6 @@ export default function Settings({ onNavigate, mode, setMode, localSttModel, set
   const fileInputRef = { current: null };
 
   // ---- New settings-tab state (all persisted through the settings backend) ----
-  // Ambient shortcut: config from the main process + local UI state.
-  const [ambientCfg, setAmbientCfg] = useState({ enabled: true, chords: [] });
-  const [ambientInfo, setAmbientInfo] = useState(null); // live registration info
-  const [recordingChord, setRecordingChord] = useState(false);
-  const [chordMsg, setChordMsg] = useState("");
   // UI animations level: "full" | "reduced" | "off"
   const [animLevel, setAnimLevel] = useState(ctxSettings?.animations || "full");
   // AI behavior (custom instructions / note sections / depth).
@@ -281,77 +235,6 @@ export default function Settings({ onNavigate, mode, setMode, localSttModel, set
   const [behaviorSaved, setBehaviorSaved] = useState(false);
   // Legal (Terms & Conditions) modal.
   const [legalOpen, setLegalOpen] = useState(false);
-
-  // ---- Ambient shortcut: load config + live registration info ----
-  useEffect(() => {
-    const api = window.electronAPI?.ambientAPI;
-    if (!api?.getInfo) return;
-    api.getInfo().then((info) => {
-      setAmbientInfo(info);
-      setAmbientCfg({ enabled: info.enabled !== false, chords: info.chords || [] });
-    }).catch(() => {});
-  }, []);
-
-  const applyAmbient = async (cfg) => {
-    setAmbientCfg(cfg);
-    try {
-      const res = await window.electronAPI?.ambientAPI?.configure(cfg);
-      if (res) {
-        setAmbientInfo((prev) => ({ ...prev, ...res, enabled: cfg.enabled }));
-        setChordMsg(res.ok ? "" : "⚠ Chord claimed by another app — try a different one.");
-      }
-      onKeysChanged?.();
-    } catch {
-      setChordMsg("Failed to apply shortcut settings");
-    }
-  };
-
-  // Live keyboard capture: press any combination to set the chord.
-  // Built from e.code (physical key), NOT e.key — with Option held, e.key
-  // becomes a dead-key glyph (⌥+R → "®"), which produced garbage accelerators
-  // and made Custom appear broken. e.code stays stable across modifiers.
-  const captureChord = useCallback((e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.key === "Escape") {
-      setRecordingChord(false);
-      setChordMsg("");
-      return;
-    }
-    if (e.type === "keyup" || e.repeat) return;
-    // Map the physical key code to an accelerator token.
-    let token = null;
-    if (e.code.startsWith("Key")) token = e.code.slice(3);            // KeyR → R
-    else if (e.code.startsWith("Digit")) token = e.code.slice(5);     // Digit7 → 7
-    else if (e.code === "Space") token = "Space";
-    else if (/^(F[1-9]|F1[0-9])$/.test(e.code)) token = e.code;
-    else if (/^Numpad\d$/.test(e.code)) token = `num${e.code.slice(6)}`;
-    else if (",.;/'[]\\-=`".includes(e.key)) token = e.key;           // punctuation keys
-    else return; // modifier alone or unsupported key — wait for the real key
-    const parts = [];
-    if (e.metaKey || e.ctrlKey) parts.push("CommandOrControl");
-    if (e.altKey) parts.push("Alt");
-    if (e.shiftKey) parts.push("Shift");
-    parts.push(token);
-    if (parts.filter((p) => p !== "Shift").length < 2) {
-      setChordMsg("Add at least one modifier (⌘/Ctrl or ⌥) plus a key.");
-      return;
-    }
-    const chord = parts.join("+");
-    setRecordingChord(false);
-    setChordMsg("");
-    applyAmbient({ enabled: true, chords: [chord] });
-  }, []);
-
-  useEffect(() => {
-    if (!recordingChord) return;
-    window.addEventListener("keydown", captureChord, true);
-    window.addEventListener("keyup", captureChord, true);
-    return () => {
-      window.removeEventListener("keydown", captureChord, true);
-      window.removeEventListener("keyup", captureChord, true);
-    };
-  }, [recordingChord, captureChord]);
 
   const saveBehavior = async (next) => {
     setBehavior(next);
@@ -453,9 +336,6 @@ export default function Settings({ onNavigate, mode, setMode, localSttModel, set
       console.warn("Settings save failed:", err?.message || err);
     }
   };
-
-  // Auto-save on unmount so leaving the tab never loses a pending change.
-  useEffect(() => () => { save(); }, []);
 
   // As a tab, Settings auto-saves — Escape returns to the Dashboard.
   useEffect(() => {
@@ -592,7 +472,7 @@ export default function Settings({ onNavigate, mode, setMode, localSttModel, set
                       )}
                       {downloading && (
                         <div style={{ height: 3, borderRadius: 2, background: COLORS.border, overflow: "hidden" }}>
-                          <div style={{ height: "100%", width: `${progress}%`, background: COLORS.accent, transition: "width 300ms ease" }} />
+                          <div style={{ height: "100%", width: `${progress}%`, background: COLORS.accent }} />
                         </div>
                       )}
                     </>
@@ -613,7 +493,7 @@ export default function Settings({ onNavigate, mode, setMode, localSttModel, set
             const pct = Math.round((model.progress || 0) * 100);
             return (
               <Row key={model.id} title={model.title} sub={`${model.description} · ${model.sizeLabel}`} last={index === localLlmStates.length - 1} onClick={model.downloaded ? () => setLocalLlmModel(model.id) : undefined} stack={model.downloading}>
-                {model.downloading ? <div style={{ width: "100%", height: 4, borderRadius: 2, background: COLORS.border, overflow: "hidden", marginTop: 8 }}><div style={{ height: "100%", width: `${pct}%`, background: COLORS.accent, transition: "width 300ms ease" }} /></div> : model.downloaded ? <span style={{ fontSize: 11, fontWeight: 600, color: selected ? COLORS.text : COLORS.textTertiary }}>{selected ? "Active" : "Ready"}</span> : <button onClick={(event) => { event.stopPropagation(); downloadLocalLlm(model.id); }} style={{ border: `1px solid ${COLORS.borderStrong}`, background: COLORS.surface, color: COLORS.text, fontSize: 11, fontWeight: 600, borderRadius: 7, padding: "4px 11px", cursor: "pointer", fontFamily: FONT }}>Download</button>}
+                {model.downloading ? <div style={{ width: "100%", height: 4, borderRadius: 2, background: COLORS.border, overflow: "hidden", marginTop: 8 }}><div style={{ height: "100%", width: `${pct}%`, background: COLORS.accent }} /></div> : model.downloaded ? <span style={{ fontSize: 11, fontWeight: 600, color: selected ? COLORS.text : COLORS.textTertiary }}>{selected ? "Active" : "Ready"}</span> : <button onClick={(event) => { event.stopPropagation(); downloadLocalLlm(model.id); }} style={{ border: `1px solid ${COLORS.borderStrong}`, background: COLORS.surface, color: COLORS.text, fontSize: 11, fontWeight: 600, borderRadius: 7, padding: "4px 11px", cursor: "pointer", fontFamily: FONT }}>Download</button>}
               </Row>
             );
           })}
@@ -699,52 +579,6 @@ export default function Settings({ onNavigate, mode, setMode, localSttModel, set
             last
           >
             <span style={{ fontSize: 12, fontWeight: 500, color: COLORS.red }}>Clear…</span>
-          </Row>
-        </Group>
-
-        {/* ===== 5 · Record from anywhere ===== */}
-        <Group label="Record from Anywhere">
-          <Row
-            title="Global shortcut"
-            sub={ambientInfo?.registered?.length
-              ? `Active: ${ambientInfo.registered.map(humanizeOne).join(" or ")} — works in any app, even unfocused`
-              : "Off — no shortcut is registered"}
-          >
-            <Toggle checked={ambientCfg.enabled} onChange={(v) => applyAmbient({ ...ambientCfg, enabled: v })} />
-          </Row>
-          <Row title="Choose your shortcut" stack last>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8, width: "100%" }}>
-              {CHORD_PRESETS.map((p) => {
-                const on = ambientCfg.chords?.[0] === p.id;
-                return (
-                  <button key={p.id} onClick={() => applyAmbient({ enabled: true, chords: [p.id] })}
-                    style={{
-                      border: `1px solid ${on ? COLORS.borderStrong : COLORS.border}`,
-                      background: on ? COLORS.selected : COLORS.surface2,
-                      borderRadius: 7, padding: "5px 10px", fontSize: 11.5, fontWeight: on ? 600 : 500,
-                      color: on ? COLORS.text : COLORS.textSecondary, cursor: "pointer", fontFamily: FONT,
-                      transition: "border-color 150ms ease, background 150ms ease",
-                    }}>
-                    {p.label}
-                  </button>
-                );
-              })}
-              <button onClick={() => { setRecordingChord(true); setChordMsg(""); }}
-                style={{
-                  display: "flex", alignItems: "center", gap: 5,
-                  border: `1px dashed ${recordingChord ? COLORS.textSecondary : COLORS.borderStrong}`,
-                  background: recordingChord ? COLORS.selected : COLORS.surface2,
-                  borderRadius: 7, padding: "5px 10px", fontSize: 11.5, fontWeight: 500,
-                  color: recordingChord ? COLORS.text : COLORS.textSecondary, cursor: "pointer", fontFamily: FONT,
-                }}>
-                {recordingChord ? "Press keys now… (Esc)" : (<> <Wand2 size={11} /> Custom…</>)}
-              </button>
-            </div>
-            {chordMsg && <div style={{ fontSize: 11, color: COLORS.red, marginTop: 6 }}>{chordMsg}</div>}
-            <div style={{ fontSize: 10.5, color: COLORS.textTertiary, marginTop: 8, lineHeight: 1.5 }}>
-              If a Space chord conflicts with Spotlight, pick a letter chord (⌥⇧R).
-              The fallback {IS_MAC ? "⌘⇧U" : "Ctrl+Shift+U"} always works no matter what.
-            </div>
           </Row>
         </Group>
 
