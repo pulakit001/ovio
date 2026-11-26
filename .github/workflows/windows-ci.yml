@@ -71,7 +71,7 @@ jobs:
           # appears above Ovio's own header. Assert it on the PACKAGED main
           # process so a regression fails here instead of on a user's laptop.
           npx --yes @electron/asar extract-file "$APP" electron/main.cjs
-          for token in "setApplicationMenu(null)" "autoHideMenuBar: true" "setMenuBarVisibility(false)"; do
+          for token in "setApplicationMenu(null)" "menuBarVisible: false" "setAutoHideMenuBar(false)" "setMenuBarVisibility(false)"; do
             grep -qF "$token" main.cjs \
               || { echo "::error::default Electron menu removal missing from packaged main.cjs ($token)."; exit 1; }
           done
