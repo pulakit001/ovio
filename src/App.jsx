@@ -3,6 +3,7 @@ import Recorder from "./screens/Recorder";
 import Dashboard from "./screens/Dashboard";
 import Onboarding from "./screens/Onboarding";
 import Settings from "./screens/Settings";
+import { LocalAiSetupModal } from "./ui/LocalAiSetupModal";
 import CommandPalette from "./components/CommandPalette";
 import UpdatePrompt from "./components/UpdatePrompt";
 import GuidedTour from "./components/GuidedTour";
@@ -114,6 +115,7 @@ function AppShell() {
   const [localSttModel, setLocalSttModelState] = useState(settings?.localSttModel || "parakeet");
   const [aiProvider, setAiProviderState] = useState(settings?.aiProvider || "cloud");
   const [localLlmModel, setLocalLlmModelState] = useState(settings?.localLlmModel || "qwen2.5-3b");
+  const [localAiSetupId, setLocalAiSetupId] = useState(null);
   const [importRef, setImportRef] = useState(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [recStatus, setRecStatus] = useState(null);
@@ -186,6 +188,17 @@ function AppShell() {
     setAiProviderState(settings.aiProvider || "cloud");
     setLocalLlmModelState(settings.localLlmModel || "qwen2.5-3b");
   }, [settings]);
+
+  // Local notes can be chosen during onboarding and downloaded in the
+  // background. If the user reaches for AI before it is ready, bring back a
+  // focused progress panel for that exact selected model.
+  useEffect(() => {
+    const openSetup = (event) => {
+      setLocalAiSetupId(event.detail?.modelId || settings?.localLlmModel || "qwen2.5-3b");
+    };
+    window.addEventListener("ovio:local-ai-required", openSetup);
+    return () => window.removeEventListener("ovio:local-ai-required", openSetup);
+  }, [settings?.localLlmModel]);
 
   // Recorder is kept mounted (so a live session survives switching views)
   // but we restart its entrance animation every time it becomes visible by
@@ -588,6 +601,12 @@ button:focus-visible { outline: 2px solid rgba(198,245,95,0.42); outline-offset:
 
       {/* Model download progress / completion popup */}
       <ModelDownloadToast />
+      {localAiSetupId && (
+        <LocalAiSetupModal
+          modelId={localAiSetupId}
+          onClose={() => setLocalAiSetupId(null)}
+        />
+      )}
 
       {/* First-run walkthrough — also replayed from Settings → Appearance */}
       <GuidedTour
@@ -783,7 +802,6 @@ function ModelDownloadToast() {
               <div style={{
                 height: "100%", width: `${Math.round(dl.progress * 100)}%`,
                 background: COLORS.blueBright, borderRadius: 2,
-                 transition: "width 400ms ease",
               }} />
             </div>
             <div style={{ fontSize: 10.5, color: COLORS.textTertiary, marginTop: 4 }}>

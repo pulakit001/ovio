@@ -3,6 +3,15 @@
 export async function localLlmChat(modelId, messages, opts = {}) {
   const api = window.electronAPI?.localLlm;
   if (!api?.generate) throw new Error("Local AI is available in the Ovio desktop app only.");
+  // Do this check in the renderer so an unfinished download is an actionable
+  // setup moment, not an opaque native-runtime error. AppShell listens for
+  // this event and puts the exact model's progress in front of the user.
+  const models = await api.status?.();
+  const selected = Array.isArray(models) ? models.find((entry) => entry.id === modelId) : null;
+  if (selected && !selected.downloaded) {
+    window.dispatchEvent(new CustomEvent("ovio:local-ai-required", { detail: { modelId } }));
+    throw new Error(`${selected.title} is still downloading. Ovio has opened its progress panel.`);
+  }
   const chunks = [];
   const off = api.onToken?.((event) => {
     if (event?.text) {

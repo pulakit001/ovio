@@ -272,7 +272,6 @@ export function ModelSetupModal({ setup, onClose, onReady }) {
                 position: "absolute", top: 0, bottom: 0, left: 0,
                 width: indeterminate ? "34%" : `${Math.max(setup.percent, 1)}%`,
                 background: COLORS.accent,
-                transition: "width 700ms cubic-bezier(.22,1,.36,1)",
                 animation: indeterminate ? "ovioBarSlide 1.7s cubic-bezier(.5,0,.5,1) infinite" : "none",
               }} />
             </div>
@@ -293,7 +292,7 @@ export function ModelSetupModal({ setup, onClose, onReady }) {
           gap: 12, marginTop: 20,
         }}>
           <div style={{ fontSize: 11, color: COLORS.textTertiary, lineHeight: 1.5, maxWidth: 240 }}>
-            {busy ? "Keep Ovio open — quitting pauses the install." : "AI notes carry on in the meantime."}
+            {busy ? "Keep Ovio open — quitting pauses the install." : "You can keep using Ovio while a model installs."}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
             {primary && (
@@ -317,7 +316,7 @@ export function ModelSetupModal({ setup, onClose, onReady }) {
                   fontFamily: FONT, fontSize: 12.5, fontWeight: 500, cursor: "pointer",
                 }}
               >
-                Got it — I’ll wait
+                Continue in background
               </button>
             )}
           </div>
