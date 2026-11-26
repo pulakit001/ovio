@@ -31,6 +31,10 @@ const LOCAL_LLM_MODELS = {
 const DEFAULT_LOCAL_LLM_MODEL = "qwen2.5-3b";
 const downloads = new Map();
 let loaded = null;
+// A context with one sequence can serve one generation at a time. Serializing
+// work here keeps dashboard questions, chat, and automatic notes from racing
+// for that sequence.
+let generationQueue = Promise.resolve();
 
 function modelsDir() {
   return path.join(app.getPath("userData"), "local-llm-models");
@@ -139,13 +143,33 @@ async function ensureLoaded(id) {
   return loaded;
 }
 
-async function generate({ modelId, messages, system, maxTokens = 4096, temperature = 0.3, onToken }) {
-  const runtime = await ensureLoaded(modelId);
+async function unloadRuntime() {
+  const runtime = loaded;
+  loaded = null;
+  if (!runtime) return;
+  try { await runtime.context.dispose(); } catch {}
+  try { runtime.model.dispose(); } catch {}
+}
+
+async function acquireSequence(modelId) {
+  let runtime = await ensureLoaded(modelId);
+  // This recovery is for sessions started by an older app build, where a
+  // sequence may have been left reserved. Normal requests never hit it: their
+  // sequence is awaited below before the queue advances.
+  if (runtime.context.sequencesLeft < 1) {
+    await unloadRuntime();
+    runtime = await ensureLoaded(modelId);
+  }
+  return { runtime, sequence: runtime.context.getSequence() };
+}
+
+async function generateOne({ modelId, messages, system, maxTokens = 4096, temperature = 0.3, onToken }) {
+  const { runtime, sequence } = await acquireSequence(modelId);
   const { LlamaChatSession } = await llamaModule();
   const session = new LlamaChatSession({
-    contextSequence: runtime.context.getSequence(),
+    contextSequence: sequence,
     systemPrompt: system || "You are a helpful note-taking assistant.",
-    autoDisposeSequence: true,
+    autoDisposeSequence: false,
   });
   try {
     let answer = "";
@@ -160,15 +184,26 @@ async function generate({ modelId, messages, system, maxTokens = 4096, temperatu
     if (!answer.trim()) throw new Error("The local model returned an empty response");
     return { text: answer.trim(), provider: "local", keyName: LOCAL_LLM_MODELS[runtime.id].title };
   } finally {
-    try { session.dispose(); } catch {}
+    // node-llama-cpp releases a sequence asynchronously. Await it before the
+    // next queued request asks the context for its only available sequence.
+    try { session.dispose({ disposeSequence: false }); } catch {}
+    try { await sequence.dispose(); } catch {}
   }
 }
 
-function dispose() {
-  if (!loaded) return;
-  try { loaded.context.dispose(); } catch {}
-  try { loaded.model.dispose(); } catch {}
-  loaded = null;
+function generate(request) {
+  const next = generationQueue.then(
+    () => generateOne(request),
+    () => generateOne(request),
+  );
+  // Keep the queue live after a failed prompt so a later request can recover.
+  generationQueue = next.catch(() => {});
+  return next;
+}
+
+async function dispose() {
+  await generationQueue.catch(() => {});
+  await unloadRuntime();
 }
 
 module.exports = { LOCAL_LLM_MODELS, DEFAULT_LOCAL_LLM_MODEL, status, downloadModel, generate, dispose };

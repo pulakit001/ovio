@@ -27,6 +27,11 @@ export async function localLlmChat(modelId, messages, opts = {}) {
       maxTokens: opts.maxTokens,
       temperature: opts.temperature,
     });
+  } catch (err) {
+    if (/no sequences left/i.test(err?.message || "")) {
+      throw new Error("The local model is finishing another answer. Please try again in a moment.");
+    }
+    throw err;
   } finally {
     off?.();
   }
