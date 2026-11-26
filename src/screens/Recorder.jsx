@@ -1199,10 +1199,10 @@ export default function MacNoteTaker({
   vaultBySub,
   setVaultBySub,
 }) {
-  const { settings, getActiveGroqKeys, getActiveOpenRouterKeys, hasAnyKey } = useSettings();
+  const { settings, getActiveOpenRouterKeys, hasAnyKey } = useSettings();
 
   // Local-model gate: while Parakeet is still installing or downloading, record
-  // must NOT start a session that can only fall back to a missing Whisper file
+  // must NOT start a session before Parakeet is ready
   // and paint a red error at the bottom. It opens a progress popup instead.
   const localModelSetup = useLocalModelSetup();
   const [modelWaitOpen, setModelWaitOpen] = useState(false);
@@ -1326,9 +1326,7 @@ export default function MacNoteTaker({
   const engineLabel =
     activeEngine === "parakeet"
       ? "Local · Parakeet-TDT v3 (streaming)"
-      : activeEngine === "whisper-large"
-        ? "Local · Whisper Large v3"
-        : "";
+      : "";
   // The first Parakeet load after launch takes ~a minute. Saying "Listening…"
   // with an empty panel made it look broken; name what is actually happening.
   const listeningLabel = enginePending
@@ -1826,19 +1824,17 @@ export default function MacNoteTaker({
       // during this session, which made the chat silently fail while the
       // auto-summary (which re-reads keys every run) kept working.
       let keys = {
-        groqKeys: getActiveGroqKeys(),
         openrouterKeys: getActiveOpenRouterKeys(),
         aiProvider: settings?.aiProvider || "cloud",
-        ollama: { url: settings?.ollamaUrl, model: settings?.ollamaModel },
+        localLlmModel: settings?.localLlmModel || "qwen2.5-3b",
       };
       try {
         const plain = await window.settingsAPI?.getPlain?.();
         if (plain) {
           keys = {
-            groqKeys: plain.groqKeys?.length ? plain.groqKeys : keys.groqKeys,
             openrouterKeys: plain.openrouterKeys?.length ? plain.openrouterKeys : keys.openrouterKeys,
             aiProvider: plain.aiProvider || keys.aiProvider,
-            ollama: { url: plain.ollamaUrl || keys.ollama.url, model: plain.ollamaModel || keys.ollama.model },
+            localLlmModel: plain.localLlmModel || keys.localLlmModel,
           };
         }
       } catch {}
@@ -1868,7 +1864,7 @@ export default function MacNoteTaker({
     } finally {
       setAiLoading(false);
     }
-  }, [aiInput, aiLoading, aiMessages, transcript, aiNotes, settings, getActiveGroqKeys, getActiveOpenRouterKeys, askScope, allRecordings]);
+  }, [aiInput, aiLoading, aiMessages, transcript, aiNotes, settings, getActiveOpenRouterKeys, askScope, allRecordings]);
 
   const addProject = (name) => {
     const id = genId();
@@ -2066,8 +2062,8 @@ export default function MacNoteTaker({
   const currentRecordings = (recordingsBySub[selectedSubprojectId] || [])
     .slice().sort((a, b) => b.createdAt - a.createdAt);
 
-  // Ollama-based providers need no API keys at all.
-  const usesLocalAi = settings?.aiProvider === "ollama" || settings?.aiProvider === "localOnly";
+  // Ovio's downloaded local models need no API key.
+  const usesLocalAi = settings?.aiProvider === "localOnly";
   const noApiKey = !hasAnyKey() && !usesLocalAi;
 
   // ---- Combined ("folder") notes: ONE master note from every recording ----
@@ -2672,7 +2668,7 @@ export default function MacNoteTaker({
                     {noApiKey ? (
                       <div style={{ textAlign: "center", padding: "32px 0", color: COLORS.textTertiary, fontSize: 13, lineHeight: 1.6 }}>
                         <Brain size={28} style={{ marginBottom: 12, opacity: 0.7 }} />
-                        <div>Add an API key in Settings — or switch to Ollama — to generate AI notes.</div>
+                        <div>Add your OpenRouter API key in Settings — or download a local model — to generate AI notes.</div>
                       </div>
                     ) : (
                       <>

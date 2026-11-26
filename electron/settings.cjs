@@ -14,10 +14,9 @@ const AMBIENT_DEFAULT_CHORDS = ["CommandOrControl+Shift+Space", "Alt+Shift+Space
 const DEFAULT_SETTINGS = {
   // Bumped when a default changes so existing settings files can migrate once
   // without overriding choices made after that migration.
-  settingsVersion: 2,
+  settingsVersion: 3,
   mode: "local",
-  sttModel: "whisper-large-v3-turbo",
-  localSttModel: "large",
+  localSttModel: "parakeet",
   // One-time flag: when the Parakeet engine finishes installing we promote it
   // to localSttModel and set this, so later user choices are respected.
   parakeetDefaulted: false,
@@ -25,15 +24,13 @@ const DEFAULT_SETTINGS = {
   onboardingSkipped: false,
   userName: "",
   tourComplete: false,
-  groqKeys: [],
   openrouterKeys: [],
   activeProviders: {
-    llm: "groq",
+    llm: "openrouter",
     sttLocal: true,
   },
   aiProvider: "cloud",
-  ollamaUrl: "http://localhost:11434",
-  ollamaModel: "",
+  localLlmModel: "qwen2.5-3b",
   // ---- Ambient global shortcut (record from anywhere) ----
   ambient: { enabled: true, chords: AMBIENT_DEFAULT_CHORDS },
   // ---- UI animation level ----
@@ -167,7 +164,7 @@ function migrateParsed(parsed) {
     out.settingsVersion = 2;
     migrated = true;
   }
-  for (const field of ["groqKeys", "openrouterKeys"]) {
+  for (const field of ["openrouterKeys"]) {
     out[field] = (out[field] || []).map((k) => {
       if (!k || typeof k !== "object") return k;
       const entry = { ...k };
@@ -190,15 +187,21 @@ function migrateParsed(parsed) {
       return entry;
     });
   }
-  // Local STT now offers only Parakeet + Whisper Large v3 — migrate legacy
-  // picks (small/turbo) to the most accurate Whisper so nothing breaks.
-  if (out.localSttModel === "small" || out.localSttModel === "turbo") {
-    out.localSttModel = "large";
+  // v3 removes the former STT and cloud-provider integrations. Existing choices migrate to the
+  // in-app Parakeet and local GGUF runtime; no external daemon survives.
+  if (!parsed.settingsVersion || parsed.settingsVersion < 3) {
+    out.settingsVersion = 3;
+    delete out.groqKeys;
+    delete out.ollamaUrl;
+    delete out.ollamaModel;
+    delete out.sttModel;
+    if (!out.localLlmModel) out.localLlmModel = "qwen2.5-3b";
+    if (out.localSttModel !== "parakeet") out.localSttModel = "parakeet";
     migrated = true;
   }
   // Transcription is strictly Local or Cloud: legacy "hybrid" behaved as
   // local-first, so it maps to "local". The AI-notes provider legacy value
-  // "ollama" (local-first hybrid routing) maps to the single "localOnly".
+  // The prior external local-provider selection maps to Ovio's in-app runtime.
   if (out.mode === "hybrid") {
     out.mode = "local";
     migrated = true;
@@ -227,7 +230,6 @@ function loadSettings() {
 function persistSettings(settings) {
   const clean = {
     ...settings,
-    groqKeys: (settings.groqKeys || []).map(({ key, hasKey, masked, locked, ...rest }) => rest),
     openrouterKeys: (settings.openrouterKeys || []).map(({ key, hasKey, masked, locked, ...rest }) => rest),
   };
   return writeSettings(clean);
@@ -254,7 +256,6 @@ function getPlainSettings() {
   const s = loadSettings();
   return {
     ...s,
-    groqKeys: (s.groqKeys || []).map(plainKeyEntry),
     openrouterKeys: (s.openrouterKeys || []).map(plainKeyEntry),
   };
 }
@@ -273,7 +274,6 @@ function sanitizeForRenderer(settings) {
       locked,
     };
   };
-  clone.groqKeys = (settings.groqKeys || []).map(maskEntry);
   clone.openrouterKeys = (settings.openrouterKeys || []).map(maskEntry);
   return clone;
 }
@@ -333,7 +333,6 @@ function registerSettingsIpc({ onChange } = {}) {
     });
     return {
       ...s,
-      groqKeys: (s.groqKeys || []).map(toRenderer),
       openrouterKeys: (s.openrouterKeys || []).map(toRenderer),
     };
   });
@@ -341,9 +340,6 @@ function registerSettingsIpc({ onChange } = {}) {
   const handleUpdate = (_e, patch) => {
     const s = getPlainSettings();
     const merged = { ...s, ...patch };
-    if (patch.groqKeys) {
-      merged.groqKeys = mergeProviderKeys(s.groqKeys, patch.groqKeys);
-    }
     if (patch.openrouterKeys) {
       merged.openrouterKeys = mergeProviderKeys(s.openrouterKeys, patch.openrouterKeys);
     }

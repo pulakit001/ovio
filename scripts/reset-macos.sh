@@ -2,7 +2,7 @@
 # Ovio — start fresh on macOS.
 #
 # Removes the Ovio app, its caches, settings, downloaded models and the local
-# Parakeet/Whisper runtime (~7 GB), but keeps your recordings and library:
+# Parakeet and local AI runtimes, but keeps your recordings and library:
 #   ~/Library/Application Support/ovio/files
 #   ~/Library/Application Support/ovio/library
 #

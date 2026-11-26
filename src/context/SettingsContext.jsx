@@ -26,7 +26,7 @@ function normalizeAiBehavior(raw) {
 
 export function SettingsProvider({ children }) {
   const [settings, setSettings] = useState(null);
-  const [actualKeys, setActualKeys] = useState({ groqKeys: [], openrouterKeys: [] });
+  const [actualKeys, setActualKeys] = useState({ openrouterKeys: [] });
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -37,15 +37,12 @@ export function SettingsProvider({ children }) {
         const plain = await window.settingsAPI.getPlain();
         setSettings({
           mode: s.mode || "local",
-          sttModel: s.sttModel || "whisper-large-v3-turbo",
-          localSttModel: s.localSttModel || "large",
+          localSttModel: s.localSttModel || "parakeet",
           onboardingComplete: !!s.onboardingComplete,
           onboardingSkipped: !!s.onboardingSkipped,
-          groqKeys: s.groqKeys || [],
           openrouterKeys: s.openrouterKeys || [],
           aiProvider: s.aiProvider || "cloud",
-          ollamaUrl: s.ollamaUrl || "http://localhost:11434",
-          ollamaModel: s.ollamaModel || "",
+          localLlmModel: s.localLlmModel || "qwen2.5-3b",
           // New backend-backed settings surfaces (Settings tab).
           ambient: s.ambient || { enabled: true, chords: ["CommandOrControl+Shift+Space", "Alt+Shift+Space"] },
           animations: s.animations || "full",
@@ -56,35 +53,28 @@ export function SettingsProvider({ children }) {
           tourComplete: !!s.tourComplete,
         });
         setActualKeys({
-          groqKeys: plain.groqKeys || [],
           openrouterKeys: plain.openrouterKeys || [],
         });
       } else {
         setSettings({
           mode: "local",
-          sttModel: "whisper-large-v3-turbo",
-          localSttModel: "large",
+          localSttModel: "parakeet",
           onboardingComplete: true,
           onboardingSkipped: false,
-          groqKeys: [],
           openrouterKeys: [],
           aiProvider: "cloud",
-          ollamaUrl: "http://localhost:11434",
-          ollamaModel: "",
+          localLlmModel: "qwen2.5-3b",
         });
       }
     } catch (e) {
       setSettings({
         mode: "local",
-        sttModel: "whisper-large-v3-turbo",
-        localSttModel: "large",
+        localSttModel: "parakeet",
         onboardingComplete: true,
         onboardingSkipped: false,
-        groqKeys: [],
         openrouterKeys: [],
         aiProvider: "cloud",
-        ollamaUrl: "http://localhost:11434",
-        ollamaModel: "",
+        localLlmModel: "qwen2.5-3b",
       });
     } finally {
       setLoading(false);
@@ -114,16 +104,12 @@ export function SettingsProvider({ children }) {
 
   // Only keys with actual (decrypted) key material count as usable — a stored
   // entry whose value could not be decrypted must not be treated as a key.
-  const getActiveGroqKeys = useCallback(() => {
-    return actualKeys.groqKeys.filter((k) => (k.active || k.active === undefined) && k.key);
-  }, [actualKeys]);
-
   const getActiveOpenRouterKeys = useCallback(() => {
     return actualKeys.openrouterKeys.filter((k) => (k.active || k.active === undefined) && k.key);
   }, [actualKeys]);
 
   const hasAnyKey = useCallback(() => {
-    return actualKeys.groqKeys.some((k) => k.key) || actualKeys.openrouterKeys.some((k) => k.key);
+    return actualKeys.openrouterKeys.some((k) => k.key);
   }, [actualKeys]);
 
   return (
@@ -134,7 +120,6 @@ export function SettingsProvider({ children }) {
         loading,
         refresh,
         update,
-        getActiveGroqKeys,
         getActiveOpenRouterKeys,
         hasAnyKey,
       }}

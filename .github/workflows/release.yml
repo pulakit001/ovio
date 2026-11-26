@@ -64,6 +64,8 @@ jobs:
             [ -d "$APP" ] || { echo "✖ missing build: $APP"; exit 1; }
             npx --yes @electron/asar list "${APP}/Contents/Resources/app.asar" | grep -q "dist/index.html" \
               || { echo "✖ dist/index.html is NOT in ${APP} — the app would open blank."; exit 1; }
+            find "${APP}" -name "llama-addon.node" | grep -q "@node-llama-cpp" \
+              || { echo "✖ local AI addon is missing from ${APP}."; exit 1; }
             echo "✔ dist/index.html present in ${APP}."
           done
 
@@ -115,6 +117,8 @@ jobs:
           # asar list uses backslashes + CRLF on Windows, so match loosely.
           npx --yes @electron/asar list "$APP" | tr -d '\r' | grep -qi "index.html" \
             || { echo "✖ renderer (index.html) is NOT in the asar — the app would open blank."; exit 1; }
+          find release/win-unpacked -name "llama-addon.node" | tr -d '\r' | grep -q "win-x64" \
+            || { echo "✖ Windows local AI addon is missing."; exit 1; }
           echo "✔ renderer (index.html) is packaged."
 
       - name: Upload Windows artifacts
@@ -152,6 +156,8 @@ jobs:
           APP="release/linux-unpacked/resources/app.asar"
           npx --yes @electron/asar list "$APP" | grep -q "^/dist/index.html$" \
             || { echo "✖ dist/index.html is NOT in the asar — the app would open blank."; exit 1; }
+          find release/linux-unpacked -name "llama-addon.node" | grep -q "linux-x64" \
+            || { echo "✖ Linux local AI addon is missing."; exit 1; }
           echo "✔ dist/index.html is packaged."
 
       - name: Upload Linux artifacts

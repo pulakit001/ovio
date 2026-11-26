@@ -34,11 +34,7 @@ function Logomark() {
   );
 }
 
-const MODEL_LABELS = {
-  small: "Whisper Small",
-  turbo: "Whisper Turbo",
-  large: "Whisper Large v3",
-};
+const MODEL_LABELS = { "qwen2.5-1.5b": "Qwen 2.5 · 1.5B", "qwen2.5-3b": "Qwen 2.5 · 3B", "qwen2.5-7b": "Qwen 2.5 · 7B" };
 
 // The onboarding walkthrough. Each step names the view it belongs to and a
 // data-tour anchor in that view; the shell switches tabs before the spotlight
@@ -115,11 +111,9 @@ function AppShell() {
   const [navSubprojectId, setNavSubprojectId] = useState(null);
   const [navRecordingId, setNavRecordingId] = useState(null);
   const [mode, setModeState] = useState(settings?.mode || "local");
-  const [sttModel, setSttModelState] = useState(settings?.sttModel || "whisper-large-v3-turbo");
-  const [localSttModel, setLocalSttModelState] = useState(settings?.localSttModel || "large");
+  const [localSttModel, setLocalSttModelState] = useState(settings?.localSttModel || "parakeet");
   const [aiProvider, setAiProviderState] = useState(settings?.aiProvider || "cloud");
-  const [ollamaUrl, setOllamaUrlState] = useState(settings?.ollamaUrl || "http://localhost:11434");
-  const [ollamaModel, setOllamaModelState] = useState(settings?.ollamaModel || "");
+  const [localLlmModel, setLocalLlmModelState] = useState(settings?.localLlmModel || "qwen2.5-3b");
   const [importRef, setImportRef] = useState(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [recStatus, setRecStatus] = useState(null);
@@ -188,11 +182,9 @@ function AppShell() {
   useEffect(() => {
     if (!settings) return;
     setModeState(settings.mode || "local");
-    setSttModelState(settings.sttModel || "whisper-large-v3-turbo");
-    setLocalSttModelState(settings.localSttModel || "large");
+    setLocalSttModelState(settings.localSttModel || "parakeet");
     setAiProviderState(settings.aiProvider || "cloud");
-    setOllamaUrlState(settings.ollamaUrl || "http://localhost:11434");
-    setOllamaModelState(settings.ollamaModel || "");
+    setLocalLlmModelState(settings.localLlmModel || "qwen2.5-3b");
   }, [settings]);
 
   // Recorder is kept mounted (so a live session survives switching views)
@@ -275,11 +267,6 @@ function AppShell() {
     refresh();
   }, [update, refresh]);
 
-  const setSttModel = useCallback((m) => {
-    setSttModelState(m);
-    update({ sttModel: m });
-  }, [update]);
-
   const setLocalSttModel = useCallback((m) => {
     setLocalSttModelState(m);
     update({ localSttModel: m });
@@ -290,17 +277,12 @@ function AppShell() {
     update({ aiProvider: p });
   }, [update]);
 
-  const setOllamaUrl = useCallback((u) => {
-    setOllamaUrlState(u);
-    update({ ollamaUrl: u });
+  const setLocalLlmModel = useCallback((m) => {
+    setLocalLlmModelState(m);
+    update({ localLlmModel: m });
   }, [update]);
 
-  const setOllamaModel = useCallback((m) => {
-    setOllamaModelState(m);
-    update({ ollamaModel: m });
-  }, [update]);
-
-  // "Fully local" preset: on-device Whisper STT + Ollama for AI notes.
+  // Fully local preset: on-device Parakeet STT + Ovio's local GGUF runtime.
   const setFullyLocal = useCallback(() => {
     setModeState("local");
     setAiProviderState("localOnly");
@@ -491,16 +473,12 @@ button:focus-visible { outline: 2px solid rgba(198,245,95,0.42); outline-offset:
           onNavigate={(tab) => setView(tab)}
           mode={mode}
           setMode={setMode}
-          sttModel={sttModel}
-          setSttModel={setSttModel}
           localSttModel={localSttModel}
           setLocalSttModel={setLocalSttModel}
           aiProvider={aiProvider}
           setAiProvider={setAiProvider}
-          ollamaUrl={ollamaUrl}
-          setOllamaUrl={setOllamaUrl}
-          ollamaModel={ollamaModel}
-          setOllamaModel={setOllamaModel}
+          localLlmModel={localLlmModel}
+          setLocalLlmModel={setLocalLlmModel}
           setFullyLocal={setFullyLocal}
           onExport={exportData}
           onImport={() => { setImportRef((r) => r || document.createElement("input")); if (importRef) { importRef.type = "file"; importRef.accept = ".json"; importRef.onchange = (e) => { const f = e.target.files?.[0]; if (f) importData(f); }; importRef.click(); } }}
@@ -754,15 +732,14 @@ function FloatingRecPill({ status, onBack }) {
   );
 }
 
-// Global model-download popup: appears bottom-right whenever a local
-// Whisper model is downloading, and shows a completion toast when done.
+// Global local-AI model download popup.
 function ModelDownloadToast() {
   const [dl, setDl] = useState(null);   // { id, progress }
   const [done, setDone] = useState(null); // { id }
 
   useEffect(() => {
-    if (!window.electronAPI?.onDownloadProgress) return;
-    const off = window.electronAPI.onDownloadProgress(({ id, progress }) => {
+    if (!window.electronAPI?.localLlm?.onDownloadProgress) return;
+    const off = window.electronAPI.localLlm.onDownloadProgress(({ id, progress }) => {
       if (progress >= 1) {
         setDl(null);
         setDone({ id });
@@ -776,7 +753,7 @@ function ModelDownloadToast() {
   }, []);
 
   if (!dl && !done) return null;
-  const label = MODEL_LABELS[done?.id || dl?.id] || "Whisper model";
+  const label = MODEL_LABELS[done?.id || dl?.id] || "local AI model";
 
   return (
     <div style={{

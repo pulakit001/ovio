@@ -1,12 +1,9 @@
 const { app, BrowserWindow, ipcMain, session, globalShortcut, screen, dialog, shell, Menu, nativeTheme } = require("electron");
 const path = require("path");
 const fs = require("fs");
-const {
-  initWhisper, transcribePcm, destroyWhisper, isInitialized,
-  modelStatus, downloadModel, LOCAL_MODELS,
-} = require("./whisper.cjs");
 const { registerSettingsIpc, loadSettings, persistSettings, AMBIENT_DEFAULT_CHORDS } = require("./settings.cjs");
 const parakeet = require("./parakeet.cjs");
+const localLlm = require("./local-llm.cjs");
 const { startUpdater, stopUpdater } = require("./updater.cjs");
 const { registerStoreIpc } = require("./storage.cjs");
 
@@ -407,34 +404,6 @@ app.whenReady().then(() => {
     (webContents, permission) => true
   );
 
-  try {
-    // Pre-load the user's preferred local model (falls back silently if absent).
-    initWhisper(loadSettings().localSttModel);
-    console.log("[ovio] Whisper engine ready");
-  } catch (err) {
-    console.error("[ovio] Whisper init failed:", err.message);
-  }
-
-  ipcMain.handle("whisper:transcribe", async (_event, chunk, model) => {
-    const pcm = Float32Array.from(chunk);
-    return await transcribePcm(pcm, model);
-  });
-
-  ipcMain.handle("whisper:modelsStatus", () => modelStatus());
-
-  ipcMain.handle("whisper:downloadModel", async (_event, id) => {
-    if (!LOCAL_MODELS[id]) throw new Error(`Unknown model: ${id}`);
-    return downloadModel(id, (progress, received, total) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send("whisper:download-progress", { id, progress, received, total });
-      }
-    });
-  });
-
-  ipcMain.handle("whisper:status", () => ({
-    initialized: isInitialized(),
-  }));
-
   // ----- Parakeet (local streaming STT sidecar) -----
   parakeet.setNotify((event, st) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -476,87 +445,19 @@ app.whenReady().then(() => {
   ipcMain.handle("parakeet:ensureServer", () => parakeet.ensureServer());
   ipcMain.handle("parakeet:transcribeFile", (_event, filePath) => parakeet.transcribeFile(filePath));
 
-  // ----- Ollama (local AI notes) -----
-  // Tags + pull are routed through the main process so they work regardless of
-  // the renderer's origin (http://localhost:5173 in dev, file:// when packaged)
-  // and so the streamed pull progress can be piped as IPC events.
-  const normalizeOllamaUrl = (u) => (String(u || "").trim() || "http://localhost:11434").replace(/\/+$/, "");
-  const activeOllamaPulls = new Set();
-
-  ipcMain.handle("ollama:tags", async (_event, url) => {
-    const base = normalizeOllamaUrl(url);
-    try {
-      const res = await fetch(`${base}/api/tags`, { signal: AbortSignal.timeout(2500) });
-      if (!res.ok) return { ok: false, url: base, error: `Ollama responded with HTTP ${res.status}` };
-      const data = await res.json();
-      const models = (data.models || []).map((m) => ({ id: m.name, name: m.name, size: m.size }));
-      return { ok: true, url: base, models };
-    } catch (err) {
-      const aborted = err?.name === "TimeoutError" || err?.name === "AbortError";
-      return {
-        ok: false, url: base,
-        error: aborted ? "Ollama did not respond in time — is it running?" : "Ollama not reachable — start it with `ollama serve`",
-      };
-    }
-  });
-
-  ipcMain.handle("ollama:pull", async (event, url, model) => {
-    if (!model) return { ok: false, error: "No model specified" };
-    if (activeOllamaPulls.has(model)) return { ok: true, already: true };
-    const base = normalizeOllamaUrl(url);
+  // ----- In-app local AI notes -----
+  ipcMain.handle("local-llm:status", () => localLlm.status());
+  ipcMain.handle("local-llm:download", async (event, id) => {
     const sender = event.sender;
-    activeOllamaPulls.add(model);
-    try {
-      const res = await fetch(`${base}/api/pull`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model, stream: true }),
-      });
-      if (!res.ok || !res.body) throw new Error(`Ollama responded with HTTP ${res.status}`);
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-      let lastSent = 0;
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split("\n");
-        buf = lines.pop() || "";
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          let j;
-          try { j = JSON.parse(line); } catch { continue; }
-          if (j.error) throw new Error(j.error);
-          const total = j.total || 0;
-          const completed = j.completed || 0;
-          const percent = total > 0 ? completed / total : j.status === "success" ? 1 : 0;
-          const finished = j.status === "success";
-          // Throttle progress events to ~8/s to keep the renderer snappy.
-          const now = Date.now();
-          if (finished || now - lastSent > 120) {
-            lastSent = now;
-            if (!sender.isDestroyed()) {
-              sender.send("ollama:pull-progress", { model, status: j.status, percent, done: finished });
-            }
-          }
-          if (finished) {
-            activeOllamaPulls.delete(model);
-            return { ok: true };
-          }
-        }
-      }
-      activeOllamaPulls.delete(model);
-      return { ok: true };
-    } catch (err) {
-      activeOllamaPulls.delete(model);
-      try {
-        if (!sender.isDestroyed()) {
-          sender.send("ollama:pull-progress", { model, error: err.message, percent: 0, done: false });
-        }
-      } catch {}
-      return { ok: false, error: err.message };
-    }
+    return localLlm.downloadModel(id, (progress) => {
+      if (!sender.isDestroyed()) sender.send("local-llm:download-progress", progress);
+    });
+  });
+  ipcMain.handle("local-llm:generate", async (event, request) => {
+    const sender = event.sender;
+    return localLlm.generate({ ...request, onToken: (text) => {
+      if (!sender.isDestroyed()) sender.send("local-llm:token", { text });
+    } });
   });
 
   createWindow();
@@ -884,7 +785,7 @@ app.whenReady().then(() => {
 
 app.on("before-quit", () => {
   stopUpdater();
-  destroyWhisper();
+  localLlm.dispose();
   parakeet.stopServer();
   destroyPanel();
   if (shortcutRetryTimer) clearInterval(shortcutRetryTimer);

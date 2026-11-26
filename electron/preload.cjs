@@ -13,15 +13,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Version/build info for Settings → About.
   appInfo: () => ipcRenderer.invoke("app:info"),
   userName: () => ipcRenderer.invoke("app:userName"),
-  transcribePcm: (chunk, model) => ipcRenderer.invoke("whisper:transcribe", chunk, model),
-  whisperStatus: () => ipcRenderer.invoke("whisper:status"),
-  modelsStatus: () => ipcRenderer.invoke("whisper:modelsStatus"),
-  downloadModel: (id) => ipcRenderer.invoke("whisper:downloadModel", id),
-  onDownloadProgress: (cb) => {
-    const listener = (_e, data) => cb(data);
-    ipcRenderer.on("whisper:download-progress", listener);
-    return () => ipcRenderer.removeListener("whisper:download-progress", listener);
-  },
   parakeetAPI: {
     status: () => ipcRenderer.invoke("parakeet:status"),
     installEngine: () => ipcRenderer.invoke("parakeet:installEngine"),
@@ -34,13 +25,19 @@ contextBridge.exposeInMainWorld("electronAPI", {
       return () => ipcRenderer.removeListener("parakeet:status", listener);
     },
   },
-  ollamaAPI: {
-    tags: (url) => ipcRenderer.invoke("ollama:tags", url),
-    pull: (url, model) => ipcRenderer.invoke("ollama:pull", url, model),
-    onPullProgress: (cb) => {
+  localLlm: {
+    status: () => ipcRenderer.invoke("local-llm:status"),
+    download: (id) => ipcRenderer.invoke("local-llm:download", id),
+    generate: (request) => ipcRenderer.invoke("local-llm:generate", request),
+    onDownloadProgress: (cb) => {
       const listener = (_e, data) => cb(data);
-      ipcRenderer.on("ollama:pull-progress", listener);
-      return () => ipcRenderer.removeListener("ollama:pull-progress", listener);
+      ipcRenderer.on("local-llm:download-progress", listener);
+      return () => ipcRenderer.removeListener("local-llm:download-progress", listener);
+    },
+    onToken: (cb) => {
+      const listener = (_e, data) => cb(data);
+      ipcRenderer.on("local-llm:token", listener);
+      return () => ipcRenderer.removeListener("local-llm:token", listener);
     },
   },
   // Ambient recording popup (floating panel spawned by the global shortcut):

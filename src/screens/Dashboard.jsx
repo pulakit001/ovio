@@ -606,14 +606,13 @@ async function fetchAiKeys() {
   try {
     const plain = await window.settingsAPI?.getPlain?.();
     return {
-      groqKeys: plain?.groqKeys || [],
       openrouterKeys: plain?.openrouterKeys || [],
       aiProvider: plain?.aiProvider || "cloud",
-      ollama: { url: plain?.ollamaUrl, model: plain?.ollamaModel },
+      localLlmModel: plain?.localLlmModel || "qwen2.5-3b",
       aiBehavior: plain?.aiBehavior || {},
     };
   } catch {
-    return { groqKeys: [], openrouterKeys: [], aiProvider: "cloud", ollama: {}, aiBehavior: {} };
+    return { openrouterKeys: [], aiProvider: "cloud", localLlmModel: "qwen2.5-3b", aiBehavior: {} };
   }
 }
 

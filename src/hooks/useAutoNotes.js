@@ -10,29 +10,24 @@ async function fetchKeys(settings) {
   try {
     const plain = await window.settingsAPI.getPlain();
     return {
-      groqKeys: plain.groqKeys || [],
       openrouterKeys: plain.openrouterKeys || [],
       aiProvider: plain.aiProvider || settings?.aiProvider || "cloud",
-      ollama: {
-        url: plain.ollamaUrl || settings?.ollamaUrl,
-        model: plain.ollamaModel || settings?.ollamaModel,
-      },
+      localLlmModel: plain.localLlmModel || settings?.localLlmModel || "qwen2.5-3b",
       // Settings → AI Behavior rides along to every notes/chat call.
       aiBehavior: plain.aiBehavior || settings?.aiBehavior || {},
     };
   } catch {
     return {
-      groqKeys: [],
       openrouterKeys: [],
       aiProvider: settings?.aiProvider || "cloud",
-      ollama: { url: settings?.ollamaUrl, model: settings?.ollamaModel },
+      localLlmModel: settings?.localLlmModel || "qwen2.5-3b",
       aiBehavior: settings?.aiBehavior || {},
     };
   }
 }
 
 export default function useAutoNotes(transcript, isTranscribing) {
-  const { getActiveGroqKeys, getActiveOpenRouterKeys, settings } = useSettings();
+  const { getActiveOpenRouterKeys, settings } = useSettings();
   const [aiNotes, setAiNotes] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   // Live pipeline progress: { stage, part, totalParts, percent } — drives the
@@ -51,7 +46,7 @@ export default function useAutoNotes(transcript, isTranscribing) {
   const busyRef = useRef(false);
   const rerunRef = useRef(false);
   const aliveRef = useRef(true);
-  const keysRef = useRef({ groqKeys: [], openrouterKeys: [], aiProvider: "cloud", ollama: null });
+  const keysRef = useRef({ openrouterKeys: [], aiProvider: "cloud", localLlmModel: "qwen2.5-3b" });
   const runRef = useRef(null);
   // When set, generation builds ONE combined note from these recordings
   // instead of the live single transcript: { label, recordings: [...] }.
@@ -59,10 +54,9 @@ export default function useAutoNotes(transcript, isTranscribing) {
 
   transcriptRef.current = transcript;
   keysRef.current = {
-    groqKeys: [],
     openrouterKeys: [],
     aiProvider: settings?.aiProvider || "cloud",
-    ollama: { url: settings?.ollamaUrl, model: settings?.ollamaModel },
+    localLlmModel: settings?.localLlmModel || "qwen2.5-3b",
   };
 
   const run = useCallback(async () => {

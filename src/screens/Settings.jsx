@@ -4,8 +4,7 @@ import {
   X, Plus, Trash2, Check,
   Download, Upload, Server, ScrollText, Wand2, Sun, Moon,
 } from "lucide-react";
-import { verifyGroqKey, verifyOpenRouterKey } from "../services/verifyKeys";
-import { checkOllama, OLLAMA_TOP_MODELS } from "../services/ollama";
+import { verifyOpenRouterKey } from "../services/verifyKeys";
 import { FONT, COLORS, RADIUS, TYPE } from "../ui/theme";
 import { PageHeader } from "../ui/kit";
 import { useSettings } from "../context/SettingsContext";
@@ -186,7 +185,7 @@ function KeyRow({ entry, provider, onUpdate, onRemove, onToggle, last }) {
   const verify = async () => {
     setVerifying(true);
     setStatus(null);
-    const res = provider === "groq" ? await verifyGroqKey(value) : await verifyOpenRouterKey(value);
+    const res = await verifyOpenRouterKey(value);
     setStatus(res);
     setVerifying(false);
     if (res.ok) {
@@ -212,7 +211,7 @@ function KeyRow({ entry, provider, onUpdate, onRemove, onToggle, last }) {
         {editing ? (
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
             <input autoFocus value={value} onChange={(e) => { setValue(e.target.value); setStatus(null); }}
-              placeholder={provider === "groq" ? "AIza…" : "sk-or-v1-..."}
+              placeholder="sk-or-v1-..."
               style={{ flex: 1, border: `1px solid ${COLORS.borderStrong}`, outline: "none", fontSize: 12, fontFamily: FONT, color: COLORS.text, background: COLORS.surface, borderRadius: 6, padding: "6px 8px" }} />
             <button onClick={verify} disabled={verifying || !value.trim()}
               style={{ border: `1px solid ${COLORS.borderStrong}`, background: COLORS.surface2, color: COLORS.text, fontSize: 11, fontWeight: 600, borderRadius: 6, padding: "6px 10px", cursor: "pointer", fontFamily: FONT }}>
@@ -258,25 +257,15 @@ const NOTE_SECTIONS = [
   { id: "followUps", label: "Follow-ups", desc: "Actions, owners, open threads" },
 ];
 
-export default function Settings({ onNavigate, mode, setMode, sttModel, setSttModel, localSttModel, setLocalSttModel, aiProvider, setAiProvider, ollamaUrl, setOllamaUrl, ollamaModel, setOllamaModel, setFullyLocal, onExport, onImport, onClearAll, onKeysChanged, ambientShortcutLabel, onReplayTour }) {
+export default function Settings({ onNavigate, mode, setMode, localSttModel, setLocalSttModel, aiProvider, setAiProvider, localLlmModel, setLocalLlmModel, setFullyLocal, onExport, onImport, onClearAll, onKeysChanged, ambientShortcutLabel, onReplayTour }) {
   const { settings: ctxSettings, update: updateSettings } = useSettings();
-  const [groqKeys, setGroqKeys] = useState([]);
   const [openrouterKeys, setOpenrouterKeys] = useState([]);
   const [loadingKeys, setLoadingKeys] = useState(true);
-  const [showAddGroq, setShowAddGroq] = useState(false);
   const [showAddOr, setShowAddOr] = useState(false);
-  const [newGroq, setNewGroq] = useState("");
   const [newOr, setNewOr] = useState("");
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
-  const [ollamaStatus, setOllamaStatus] = useState(null);
-  const [checkingOllama, setCheckingOllama] = useState(false);
-  // Curated 3-model Ollama picker (same as onboarding): installed ids and
-  // per-model pull progress for the live collapsed download view.
-  const [ollamaPulls, setOllamaPulls] = useState({});
-  const [ollamaInstalled, setOllamaInstalled] = useState([]);
-  const ollamaUrlRef = useRef(ollamaUrl);
-  useEffect(() => { ollamaUrlRef.current = ollamaUrl; }, [ollamaUrl]);
+  const [localLlmStates, setLocalLlmStates] = useState([]);
   const fileInputRef = { current: null };
 
   // ---- New settings-tab state (all persisted through the settings backend) ----
@@ -399,7 +388,6 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
   const refreshKeys = async () => {
     if (window.settingsAPI) {
       const plain = await window.settingsAPI.getPlain();
-      setGroqKeys((plain.groqKeys || []).map(withKeyStatus));
       setOpenrouterKeys((plain.openrouterKeys || []).map(withKeyStatus));
     }
     setLoadingKeys(false);
@@ -409,110 +397,32 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
     refreshKeys();
   }, []);
 
-  // Auto-probe Ollama when a local provider option is selected.
-  useEffect(() => {
-    if (aiProvider && aiProvider !== "cloud") {
-      checkOllamaConnection();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aiProvider]);
-
-  // Ollama tags via the main process (works from any renderer origin — a
-  // plain renderer fetch can be blocked by CORS in Electron).
-  const refreshOllama = async (urlOverride) => {
-    const url = urlOverride ?? ollamaUrlRef.current;
-    const api = window.electronAPI?.ollamaAPI;
-    const res = api?.tags ? await api.tags(url) : await checkOllama(url);
-    setOllamaStatus(res);
-    setOllamaInstalled(res?.ok ? (res.models || []).map((m) => m.id) : []);
-    return res;
-  };
-
-  const checkOllamaConnection = async () => {
-    setCheckingOllama(true);
-    const res = await refreshOllama();
-    if (res.ok && !ollamaModel && res.models.length > 0) {
-      // Prefer the best curated model that is actually installed.
-      const best = OLLAMA_TOP_MODELS.find((m) =>
-        (res.models || []).some((x) => x.id === m.id || x.id.startsWith(m.id))
-      );
-      setOllamaModel(best?.id || res.models[0].id);
-    }
-    setCheckingOllama(false);
-  };
-
-  // Live pull progress for the curated Ollama models (same wiring as onboarding).
-  useEffect(() => {
-    const api = window.electronAPI?.ollamaAPI;
-    if (!api?.onPullProgress) return;
-    const off = api.onPullProgress((d) => {
-      if (!d?.model) return;
-      setOllamaPulls((prev) => ({
-        ...prev,
-        [d.model]: {
-          pulling: !d.done && !d.error,
-          percent: d.done ? 1 : d.percent || 0,
-          error: d.error || null,
-          ready: !!d.done,
-        },
-      }));
-      if (d.done) {
-        setOllamaModel(d.model);
-        refreshOllama();
-      }
-    });
-    return off;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Local models are downloaded and run by Ovio itself. No daemon is needed.
+  const refreshLocalLlm = useCallback(async () => {
+    try { setLocalLlmStates(await window.electronAPI?.localLlm?.status?.() || []); } catch {}
   }, []);
-
-  const pullOllama = (id) => {
-    const api = window.electronAPI?.ollamaAPI;
-    if (!api?.pull) return;
-    // Select the model being pulled so it is active the moment it lands.
-    setOllamaModel(id);
-    setOllamaPulls((prev) => ({
-      ...prev,
-      [id]: { pulling: true, percent: 0, error: null, ready: false },
-    }));
-    api
-      .pull(ollamaUrlRef.current, id)
-      .then((res) => {
-        if (res && res.ok === false) {
-          setOllamaPulls((prev) => ({
-            ...prev,
-            [id]: { pulling: false, percent: 0, error: res.error || "Pull failed", ready: false },
-          }));
-        }
-        return refreshOllama();
-      })
-      .catch(() => refreshOllama());
+  useEffect(() => { refreshLocalLlm(); }, [refreshLocalLlm]);
+  useEffect(() => {
+    const off = window.electronAPI?.localLlm?.onDownloadProgress?.(() => refreshLocalLlm());
+    return off;
+  }, [refreshLocalLlm]);
+  const downloadLocalLlm = (id) => {
+    setLocalLlmModel(id);
+    window.electronAPI?.localLlm?.download?.(id).then(refreshLocalLlm).catch(refreshLocalLlm);
   };
 
-  // Local Whisper model catalog (downloaded on demand, runs on-device)
-  const [modelStates, setModelStates] = useState([]);
   const [parakeetStatus, setParakeetStatus] = useState(null);
   const refreshModelStatus = async () => {
-    if (window.electronAPI?.modelsStatus) {
-      try { setModelStates(await window.electronAPI.modelsStatus()); } catch {}
-    }
     if (window.electronAPI?.parakeetAPI?.status) {
       try { setParakeetStatus(await window.electronAPI.parakeetAPI.status()); } catch {}
     }
   };
   useEffect(() => { refreshModelStatus(); }, []);
   useEffect(() => {
-    if (!window.electronAPI?.onDownloadProgress) return;
-    const off = window.electronAPI.onDownloadProgress(() => refreshModelStatus());
-    return off;
-  }, []);
-  useEffect(() => {
     if (!window.electronAPI?.parakeetAPI?.onStatus) return;
     const off = window.electronAPI.parakeetAPI.onStatus((st) => setParakeetStatus(st));
     return off;
   }, []);
-  const startModelDownload = (id) => {
-    window.electronAPI.downloadModel(id).then(refreshModelStatus).catch(refreshModelStatus);
-  };
   const startParakeetInstall = () => {
     window.electronAPI?.parakeetAPI?.installEngine?.().then(refreshModelStatus).catch(refreshModelStatus);
   };
@@ -526,11 +436,9 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
     try {
       const res = await window.settingsAPI.update({
         mode: mode ?? "local",
-        sttModel: sttModel ?? "whisper-large-v3-turbo",
-        localSttModel: localSttModel ?? "large",
+        localSttModel: localSttModel ?? "parakeet",
         aiProvider: aiProvider ?? "cloud",
-        ollamaUrl: ollamaUrl ?? "http://localhost:11434",
-        ollamaModel: ollamaModel ?? "",
+        localLlmModel: localLlmModel ?? "qwen2.5-3b",
       });
       if (!res || res.ok === false) throw new Error(res?.error || "Failed to save settings");
       setSaveError("");
@@ -558,23 +466,10 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
   }, []);
 
   // Adding a cloud key while "Fully Local" is selected means the user expects
-  // their key to actually be used — switch to cloud (Ollama stays available as
-  // the no-key fallback). Previously the provider silently stayed localOnly,
+  // their key to actually be used — switch to cloud. Previously the provider silently stayed localOnly,
   // so notes and chat ignored the brand-new key and "kept failing".
   const switchToCloudIfLocal = () => {
     if ((aiProvider || "cloud") === "localOnly") setAiProvider?.("cloud");
-  };
-
-  const addGroq = async () => {
-    if (!newGroq.trim()) return;
-    const entry = withKeyStatus({ id: genId(), name: `Key ${groqKeys.length + 1}`, active: true, key: newGroq.trim() });
-    const updated = [...groqKeys, entry];
-    await window.settingsAPI.update({ groqKeys: updated.map((k) => ({ id: k.id, name: k.name, active: k.active, key: k.key })) });
-    setGroqKeys(updated);
-    setShowAddGroq(false);
-    setNewGroq("");
-    switchToCloudIfLocal();
-    onKeysChanged?.();
   };
 
   const addOr = async () => {
@@ -589,42 +484,24 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
     onKeysChanged?.();
   };
 
-  const updateKey = async (provider, entry) => {
-    if (provider === "groq") {
-      const updated = groqKeys.map((k) => (k.id === entry.id ? entry : k));
-      setGroqKeys(updated);
-      await window.settingsAPI.update({ groqKeys: updated.map((k) => ({ id: k.id, name: k.name, active: k.active, key: k.key })) });
-    } else {
-      const updated = openrouterKeys.map((k) => (k.id === entry.id ? entry : k));
-      setOpenrouterKeys(updated);
-      await window.settingsAPI.update({ openrouterKeys: updated.map((k) => ({ id: k.id, name: k.name, active: k.active, key: k.key })) });
-    }
+  const updateKey = async (_provider, entry) => {
+    const updated = openrouterKeys.map((k) => (k.id === entry.id ? entry : k));
+    setOpenrouterKeys(updated);
+    await window.settingsAPI.update({ openrouterKeys: updated.map((k) => ({ id: k.id, name: k.name, active: k.active, key: k.key })) });
     onKeysChanged?.();
   };
 
-  const removeKey = async (provider, id) => {
-    if (provider === "groq") {
-      const updated = groqKeys.filter((k) => k.id !== id);
-      setGroqKeys(updated);
-      await window.settingsAPI.update({ groqKeys: updated.map((k) => ({ id: k.id, name: k.name, active: k.active, key: k.key })) });
-    } else {
-      const updated = openrouterKeys.filter((k) => k.id !== id);
-      setOpenrouterKeys(updated);
-      await window.settingsAPI.update({ openrouterKeys: updated.map((k) => ({ id: k.id, name: k.name, active: k.active, key: k.key })) });
-    }
+  const removeKey = async (_provider, id) => {
+    const updated = openrouterKeys.filter((k) => k.id !== id);
+    setOpenrouterKeys(updated);
+    await window.settingsAPI.update({ openrouterKeys: updated.map((k) => ({ id: k.id, name: k.name, active: k.active, key: k.key })) });
     onKeysChanged?.();
   };
 
-  const toggleKey = async (provider, id) => {
-    if (provider === "groq") {
-      const updated = groqKeys.map((k) => (k.id === id ? { ...k, active: !k.active } : k));
-      setGroqKeys(updated);
-      await window.settingsAPI.update({ groqKeys: updated.map((k) => ({ id: k.id, name: k.name, active: k.active, key: k.key })) });
-    } else {
-      const updated = openrouterKeys.map((k) => (k.id === id ? { ...k, active: !k.active } : k));
-      setOpenrouterKeys(updated);
-      await window.settingsAPI.update({ openrouterKeys: updated.map((k) => ({ id: k.id, name: k.name, active: k.active, key: k.key })) });
-    }
+  const toggleKey = async (_provider, id) => {
+    const updated = openrouterKeys.map((k) => (k.id === id ? { ...k, active: !k.active } : k));
+    setOpenrouterKeys(updated);
+    await window.settingsAPI.update({ openrouterKeys: updated.map((k) => ({ id: k.id, name: k.name, active: k.active, key: k.key })) });
     onKeysChanged?.();
   };
 
@@ -660,8 +537,6 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
                   const downloading = pk?.weights?.downloading;
                   const progress = Math.round((pk?.weights?.progress || 0) * 100);
                   const pkSelected = localSttModel === "parakeet";
-                  const largeSt = modelStates.find((s) => s.id === "large");
-                  const lgSelected = localSttModel === "large";
                   const modelRow = (sel, title, desc, statusColor, statusText, onClick, extra) => (
                     <div
                       onClick={onClick}
@@ -720,27 +595,6 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
                           <div style={{ height: "100%", width: `${progress}%`, background: COLORS.accent, transition: "width 300ms ease" }} />
                         </div>
                       )}
-                      {modelRow(
-                        lgSelected,
-                        "Whisper Large v3",
-                        "Whisper · ~3.1 GB",
-                        largeSt?.downloading ? COLORS.textSecondary : largeSt?.downloaded ? COLORS.textSecondary : COLORS.textTertiary,
-                        largeSt?.downloading ? `Downloading… ${Math.round((largeSt?.progress || 0) * 100)}%`
-                          : largeSt?.downloaded ? "Ready"
-                          : "Not downloaded",
-                        () => setLocalSttModel("large"),
-                        null,
-                      )}
-                      {(lgSelected && !largeSt?.downloaded && !largeSt?.downloading) && (
-                        <div style={{ fontSize: 11, color: COLORS.textSecondary, padding: "0 2px" }}>
-                          <TextAction onClick={() => startModelDownload("large")}>Download ~3.1 GB</TextAction>
-                        </div>
-                      )}
-                      {largeSt?.downloading && (
-                        <div style={{ height: 3, borderRadius: 2, background: COLORS.border, overflow: "hidden" }}>
-                          <div style={{ height: "100%", width: `${Math.round((largeSt?.progress || 0) * 100)}%`, background: COLORS.accent, transition: "width 300ms ease" }} />
-                        </div>
-                      )}
                     </>
                   );
                 })()}
@@ -751,123 +605,23 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
 
         {/* ===== 2 · AI notes ===== */}
         <Group label="AI Notes">
-          <Row
-            title="Provider"
-            sub={aiProvider === "cloud" ? "Cloud — Gemini + OpenRouter" : "Local — nothing leaves this Mac"}
-          >
-            <Seg
-              value={aiProvider}
-              onChange={setAiProvider}
-              options={[
-                { value: "cloud", label: "Cloud" },
-                { value: "localOnly", label: "Local" },
-              ]}
-            />
+          <Row title="Provider" sub={aiProvider === "cloud" ? "Cloud notes with your OpenRouter API key" : "Runs entirely inside Ovio — no service or API key needed"}>
+            <Seg value={aiProvider} onChange={setAiProvider} options={[{ value: "cloud", label: "Cloud" }, { value: "localOnly", label: "On this device" }]} />
           </Row>
-          {aiProvider === "localOnly" && (
-            <Row title="Ollama server" sub={ollamaStatus?.ok ? `Connected · ${ollamaStatus.models.length} model${ollamaStatus.models.length === 1 ? "" : "s"}` : ollamaStatus ? (ollamaStatus.error || "Not reachable") : "http://localhost:11434"} stack last>
-              <div style={{ display: "flex", gap: 6, marginTop: 8, width: "100%" }}>
-                <input value={ollamaUrl || ""} onChange={(e) => setOllamaUrl(e.target.value)}
-                  placeholder="http://localhost:11434"
-                  style={{ flex: 1, border: `1px solid ${COLORS.borderStrong}`, outline: "none", fontSize: 12, fontFamily: FONT, color: COLORS.text, background: COLORS.surface2, borderRadius: 7, padding: "6px 9px" }} />
-                <button onClick={checkOllamaConnection} disabled={checkingOllama}
-                  style={{ border: `1px solid ${COLORS.borderStrong}`, background: COLORS.surface2, color: COLORS.text, fontSize: 11.5, fontWeight: 600, borderRadius: 7, padding: "6px 12px", cursor: checkingOllama ? "default" : "pointer", fontFamily: FONT }}>
-                  {checkingOllama ? "…" : "Check"}
-                </button>
-              </div>
-            </Row>
-          )}
-          {aiProvider === "localOnly" && ollamaStatus?.ok && (() => {
-            const activePullId = Object.entries(ollamaPulls).find(([, v]) => v.pulling)?.[0];
-            const visible = OLLAMA_TOP_MODELS.filter((m) => !activePullId || activePullId === m.id);
-            const otherInstalled = (ollamaStatus.models || [])
-              .filter((m) => !OLLAMA_TOP_MODELS.some((t) => m.id === t.id || m.id.startsWith(t.id)));
-            const cur = ollamaModel || "";
+          {aiProvider === "localOnly" && localLlmStates.map((model, index) => {
+            const selected = localLlmModel === model.id;
+            const pct = Math.round((model.progress || 0) * 100);
             return (
-              <>
-                {visible.map((m, i) => {
-                  const isInstalled = ollamaInstalled.some((x) => x === m.id || x.startsWith(m.id));
-                  const pull = ollamaPulls[m.id];
-                  const isPulling = !!pull?.pulling;
-                  const pct = Math.round((pull?.percent || 0) * 100);
-                  const selected = cur === m.id || cur.startsWith(m.id);
-                  if (isPulling) {
-                    return (
-                      <Row key={m.id} title={m.title} sub={`Fetching ${m.size}… ${pct}%`} last={i === visible.length - 1 && otherInstalled.length === 0} stack>
-                        <div style={{ width: "100%", height: 4, borderRadius: 2, background: COLORS.border, overflow: "hidden", marginTop: 6 }}>
-                          <div style={{ height: "100%", width: `${pct}%`, background: COLORS.accent, borderRadius: 2, transition: "width 300ms ease" }} />
-                        </div>
-                      </Row>
-                    );
-                  }
-                  return (
-                    <Row
-                      key={m.id}
-                      onClick={isInstalled ? () => setOllamaModel(m.id) : undefined}
-                      title={m.title}
-                      sub={`${m.desc} · ${m.size}`}
-                      last={i === visible.length - 1 && otherInstalled.length === 0}
-                    >
-                      {isInstalled ? (
-                        <span style={{ fontSize: 11, fontWeight: 600, color: selected ? COLORS.text : COLORS.textTertiary }}>
-                          {selected ? "Active" : "Ready"}
-                        </span>
-                      ) : (
-                        <button onClick={(e) => { e.stopPropagation(); pullOllama(m.id); }}
-                          disabled={checkingOllama}
-                          style={{
-                            border: `1px solid ${COLORS.borderStrong}`, background: COLORS.surface,
-                            color: ollamaStatus.ok ? COLORS.text : COLORS.textTertiary,
-                            fontSize: 11, fontWeight: 600, borderRadius: 7, padding: "4px 11px",
-                            cursor: checkingOllama ? "wait" : "pointer", fontFamily: FONT,
-                          }}>
-                          Pull
-                        </button>
-                      )}
-                    </Row>
-                  );
-                })}
-                {otherInstalled.length > 0 && (
-                  <Row title="Other installed models" last stack>
-                    <select value={OLLAMA_TOP_MODELS.some((t) => cur === t.id || cur.startsWith(t.id)) ? "" : cur}
-                      onChange={(e) => e.target.value && setOllamaModel(e.target.value)}
-                      style={{ width: "100%", marginTop: 6, border: `1px solid ${COLORS.borderStrong}`, outline: "none", fontSize: 12, fontFamily: FONT, color: COLORS.text, background: COLORS.surface2, borderRadius: 7, padding: "6px 8px" }}>
-                      <option value="">{cur ? cur : "Auto (recommended model)"}</option>
-                      {otherInstalled.map((m) => (
-                        <option key={m.id} value={m.id}>{m.name}</option>
-                      ))}
-                    </select>
-                  </Row>
-                )}
-              </>
+              <Row key={model.id} title={model.title} sub={`${model.description} · ${model.sizeLabel}`} last={index === localLlmStates.length - 1} onClick={model.downloaded ? () => setLocalLlmModel(model.id) : undefined} stack={model.downloading}>
+                {model.downloading ? <div style={{ width: "100%", height: 4, borderRadius: 2, background: COLORS.border, overflow: "hidden", marginTop: 8 }}><div style={{ height: "100%", width: `${pct}%`, background: COLORS.accent, transition: "width 300ms ease" }} /></div> : model.downloaded ? <span style={{ fontSize: 11, fontWeight: 600, color: selected ? COLORS.text : COLORS.textTertiary }}>{selected ? "Active" : "Ready"}</span> : <button onClick={(event) => { event.stopPropagation(); downloadLocalLlm(model.id); }} style={{ border: `1px solid ${COLORS.borderStrong}`, background: COLORS.surface, color: COLORS.text, fontSize: 11, fontWeight: 600, borderRadius: 7, padding: "4px 11px", cursor: "pointer", fontFamily: FONT }}>Download</button>}
+              </Row>
             );
-          })()}
+          })}
         </Group>
 
-        {/* ===== 3 · API keys ===== */}
-        <Group label="API Keys">
+        {/* ===== 3 · API key ===== */}
+        <Group label="OpenRouter API Key">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 14px 6px" }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: COLORS.textSecondary }}>Gemini</div>
-            <button onClick={() => setShowAddGroq((s) => !s)} style={{ display: "flex", alignItems: "center", gap: 4, border: "none", background: "transparent", color: COLORS.textSecondary, fontSize: 12, cursor: "pointer", fontFamily: FONT }}>
-              <Plus size={13} /> Add
-            </button>
-          </div>
-          {showAddGroq && (
-            <div style={{ display: "flex", gap: 6, marginBottom: 8, padding: "0 14px 8px" }}>
-              <input autoFocus value={newGroq} onChange={(e) => setNewGroq(e.target.value)}
-                placeholder="AIza…"
-                style={{ flex: 1, border: `1px solid ${COLORS.borderStrong}`, outline: "none", fontSize: 12, fontFamily: FONT, color: COLORS.text, background: COLORS.surface2, borderRadius: 6, padding: "6px 8px" }} />
-              <button onClick={addGroq} style={{ border: `1px solid ${COLORS.borderStrong}`, background: COLORS.surface2, color: COLORS.text, fontSize: 11, fontWeight: 600, borderRadius: 6, padding: "6px 10px", cursor: "pointer", fontFamily: FONT }}>Add</button>
-            </div>
-          )}
-          {groqKeys.map((k, i) => (
-            <KeyRow key={k.id} entry={k} provider="groq" onUpdate={(e) => updateKey("groq", e)} onRemove={(id) => removeKey("groq", id)} onToggle={(id) => toggleKey("groq", id)} last={i === groqKeys.length - 1 && openrouterKeys.length === 0 && !showAddOr} />
-          ))}
-          {!loadingKeys && groqKeys.length === 0 && (
-            <div style={{ fontSize: 11.5, color: COLORS.textTertiary, padding: "0 14px 10px" }}>No keys yet — only needed for AI notes.</div>
-          )}
-
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 14px 6px", borderTop: `1px solid ${COLORS.border}` }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: COLORS.textSecondary }}>OpenRouter</div>
             <button onClick={() => setShowAddOr((s) => !s)} style={{ display: "flex", alignItems: "center", gap: 4, border: "none", background: "transparent", color: COLORS.textSecondary, fontSize: 12, cursor: "pointer", fontFamily: FONT }}>
               <Plus size={13} /> Add
@@ -885,7 +639,7 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
             <KeyRow key={k.id} entry={k} provider="openrouter" onUpdate={(e) => updateKey("openrouter", e)} onRemove={(id) => removeKey("openrouter", id)} onToggle={(id) => toggleKey("openrouter", id)} last={i === openrouterKeys.length - 1} />
           ))}
           {!loadingKeys && openrouterKeys.length === 0 && (
-            <div style={{ fontSize: 11.5, color: COLORS.textTertiary, padding: "0 14px 10px" }}>Optional fallback provider.</div>
+            <div style={{ fontSize: 11.5, color: COLORS.textTertiary, padding: "0 14px 10px" }}>Add your own key to use cloud AI notes. It is encrypted on this device and never hardcoded in Ovio.</div>
           )}
         </Group>
 
@@ -918,7 +672,7 @@ export default function Settings({ onNavigate, mode, setMode, sttModel, setSttMo
               <div style={{ fontSize: 12, color: COLORS.textSecondary, lineHeight: 1.75 }}>
                 <p><strong style={{ color: COLORS.text }}>1. Acceptance.</strong> By using Ovio you agree to these terms. If you don't agree, don't use the app.</p>
                 <p><strong style={{ color: COLORS.text }}>2. What Ovio does.</strong> Ovio records audio you choose to record, transcribes it (locally or via your configured cloud provider), and generates AI notes. You are responsible for what you record and for complying with the laws and consent rules that apply to recording conversations in your jurisdiction.</p>
-                <p><strong style={{ color: COLORS.text }}>3. Your data.</strong> Recordings, transcripts and notes live on your Mac, and transcription always runs on-device. API keys are encrypted locally. AI notes are written by the provider you configure (Gemini, OpenRouter, or your own Ollama) under its terms; with Ollama or fully-local mode nothing leaves your machine.</p>
+                <p><strong style={{ color: COLORS.text }}>3. Your data.</strong> Recordings, transcripts and notes live on your device, and transcription always runs on-device. Your OpenRouter API key is encrypted locally. Cloud AI notes are written by OpenRouter under its terms; Ovio’s downloaded local models keep AI notes on your device.</p>
                 <p><strong style={{ color: COLORS.text }}>4. AI output.</strong> AI-generated notes and answers can contain mistakes. Verify important information; Ovio is a note-taking aid, not an authoritative record.</p>
                 <p><strong style={{ color: COLORS.text }}>5. Acceptable use.</strong> Don't use Ovio to violate laws or others' rights, including recording people without legally required consent.</p>
                 <p><strong style={{ color: COLORS.text }}>6. No warranty.</strong> Ovio is provided "as is" without warranties of any kind. Snippetz Labs is not liable for damages arising from use of the app, to the maximum extent permitted by law.</p>

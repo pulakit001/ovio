@@ -26,8 +26,8 @@ Copyright (c) 2026 Snippetz Labs
 4. Third-Party Components
 
    The Software incorporates open-source components that remain under their own
-   licenses, including Electron, React, Vite, whisper.cpp, NVIDIA NeMo
-   (Parakeet-TDT), Ollama, and Lucide. Nothing in this license limits any
+   licenses, including Electron, React, Vite, NVIDIA NeMo (Parakeet-TDT),
+   node-llama-cpp, and Lucide. Nothing in this license limits any
    rights granted to you by those licenses. Model weights accessed through the
    Software are governed by their respective providers' terms.
 

@@ -424,7 +424,7 @@ def main() -> int:
     # Import uvicorn BEFORE announcing readiness: the import costs about a
     # second, and the renderer connects the moment it sees the ready line. The
     # old order printed first, so the first WebSocket hit a port with nothing
-    # listening yet, failed instantly, and the app fell back to a Whisper model
+    # listening yet, failed instantly, and the app stopped without a usable model
     # that may not be installed — a recording that produced no transcript.
     import uvicorn
 

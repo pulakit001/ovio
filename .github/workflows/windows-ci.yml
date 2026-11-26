@@ -3,7 +3,7 @@ name: Windows CI
 # Validates the app on a real Windows machine (windows-latest):
 #
 #  build-and-package  — npm ci, vite build, electron-builder NSIS installer,
-#                       then asserts the renderer and the native whisper binary
+#                       then asserts the renderer and the in-app local-AI runtime
 #                       actually made it into the packaged app. Uploads the
 #                       installer + renderer as artifacts.
 #  sidecar-protocol   — runs the Parakeet streaming-protocol test against the
@@ -76,11 +76,11 @@ jobs:
               || { echo "::error::default Electron menu removal missing from packaged main.cjs ($token)."; exit 1; }
           done
           echo "✔ default Electron menu is stripped from the packaged app."
-          # The win32-x64 native whisper binding is an optional dependency; it
-          # must be unpacked or on-device transcription silently fails at runtime.
-          find release/win-unpacked -name "whisper.node" | tr -d '\r' | grep -q "win32-x64" \
-            || { echo "::error::win32-x64 whisper.node is missing from the packaged app."; exit 1; }
-          echo "✔ win32-x64 whisper.node is unpacked."
+          # The local GGUF runtime is a native Electron-main-process module.
+          # Its platform addon must be unpacked so local AI notes work without an external daemon.
+          find release/win-unpacked -name "llama-addon.node" | tr -d '\r' | grep -q "win-x64" \
+            || { echo "::error::win-x64 llama-addon.node is missing from the packaged app."; exit 1; }
+          echo "✔ win-x64 local AI addon is unpacked."
           test -f release/win-unpacked/resources/parakeet_server.py \
             || { echo "::error::extraResources parakeet_server.py missing."; exit 1; }
           echo "✔ parakeet_server.py extraResource present."
