@@ -61,6 +61,7 @@ import os
 import socket
 import sys
 import tempfile
+import threading
 import time
 import wave
 
@@ -116,6 +117,13 @@ class Engine:
         self.model = None
         self.device = "stub" if self.stub else "cpu"
         self.engine_name = "stub" if self.stub else "nemo"
+        # NeMo's transcribe() MUTATES the model: it freezes encoder/decoder/joint
+        # on entry and unfreezes them on exit (freeze() records a snapshot that
+        # unfreeze() consumes). Two overlapping decodes therefore corrupt that
+        # state and the second one dies with "Cannot unfreeze partially without
+        # first freezing the module" — after which the stream goes silent.
+        # Every decode goes through this lock so only one runs at a time.
+        self.lock = threading.Lock()
         if not self.stub:
             self._load()
 
@@ -159,8 +167,12 @@ class Engine:
         print(json.dumps({"event": "status", "message": message}), flush=True)
 
     def transcribe(self, audio) -> str:
-        """Decode one buffer with the full-context batch pipeline. Calls are
-        serialized per session through its single decode loop."""
+        """Decode one buffer with the full-context batch pipeline. Serialized
+        across sessions and against finish(): the model is shared state."""
+        with self.lock:
+            return self._transcribe_locked(audio)
+
+    def _transcribe_locked(self, audio) -> str:
         if audio is None or len(audio) == 0:
             return ""
         if self.stub:
@@ -184,7 +196,8 @@ class Engine:
             return f"Stub transcript of file {os.path.basename(path)}."
         if self.model is None:
             raise RuntimeError("model not loaded")
-        out = self.model.transcribe([path], batch_size=1)
+        with self.lock:
+            out = self.model.transcribe([path], batch_size=1)
         return self._text_of(out)
 
     def _transcribe_via_wav(self, audio: np.ndarray) -> str:
@@ -229,6 +242,7 @@ class Session:
         self.busy = False
         self.closed = False
         self.task = None
+        self.last_beat = 0.0
 
     def start(self) -> None:
         self.task = asyncio.ensure_future(self._loop())
@@ -249,6 +263,14 @@ class Session:
             try:
                 await self._commit_if_needed()
                 await self._partial_if_needed()
+                # Heartbeat: silence produces no partial/final text, so the
+                # client cannot tell "quiet room" from "wedged engine" and
+                # would sit on a dead stream forever. This is its liveness
+                # signal (it never becomes transcript text).
+                now = time.time()
+                if now - self.last_beat >= 2.0:
+                    self.last_beat = now
+                    await self.ws.send_json({"type": "heartbeat"})
             except asyncio.CancelledError:
                 raise
             except Exception as err:  # keep the session alive through decode hiccups
@@ -290,6 +312,14 @@ class Session:
         self.closed = True
         if self.task:
             self.task.cancel()
+            # A decode already running in a worker thread is not cancellable:
+            # let the cancelled loop unwind so it stops feeding, then the engine
+            # lock below makes this flush wait for that decode instead of
+            # decoding on top of it (which is what corrupted the model state).
+            try:
+                await asyncio.gather(self.task, return_exceptions=True)
+            except Exception:
+                pass
         if len(self.buf) < SAMPLE_RATE * 0.3:
             return ""
         text = await asyncio.to_thread(self.engine.transcribe, self.buf)

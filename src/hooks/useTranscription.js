@@ -54,6 +54,12 @@ export default function useTranscription() {
   const pkStartingRef = useRef(null);    // in-flight sidecar boot (ensureServer)
   const pumpFnRef = useRef(null);        // pump() is defined below stop()
   const PK_FLUSH_TIMEOUT_MS = 15000;
+  // Stall detection for the streaming path: the sidecar heartbeats every ~2 s,
+  // so a socket that stays open while nothing arrives means the engine wedged.
+  const pkLastMsgRef = useRef(0);
+  const pkRecoverRef = useRef(0);
+  const pkWatchdogRef = useRef(null);
+  const pkRestartRef = useRef(null);     // tryStartParakeet, for the watchdog
 
   const clearInterim = useCallback(() => setInterim(""), []);
 
@@ -75,9 +81,14 @@ export default function useTranscription() {
       try { wsRef.current.close(); } catch {}
       wsRef.current = null;
     }
+    if (pkWatchdogRef.current) {
+      clearInterval(pkWatchdogRef.current);
+      pkWatchdogRef.current = null;
+    }
     parakeetActiveRef.current = false;
     pkQueueRef.current = [];
     pkStartingRef.current = null;
+    pkRecoverRef.current = 0;
     setEnginePending(false);
     bufferRef.current = new Float32Array(0);
   }, []);
@@ -101,6 +112,40 @@ export default function useTranscription() {
       windowRef.current = { id: winId };
       return [...prev, { time: formatClock(now), text: trimmed }];
     });
+  }, []);
+
+  // Watchdog for the streaming path. A healthy sidecar sends heartbeats even
+  // in silence; if the socket stays OPEN but nothing arrives for 12 s, the
+  // stream is dead and used to stay dead for the rest of the take (the UI kept
+  // saying "Listening…" with no text). Tear it down and rebuild it instead.
+  const startParakeetWatchdog = useCallback(() => {
+    if (pkWatchdogRef.current) return;
+    pkWatchdogRef.current = setInterval(() => {
+      if (!runningRef.current || !parakeetActiveRef.current) return;
+      const live = wsRef.current;
+      if (!live || live.readyState !== WebSocket.OPEN) return;
+      if (Date.now() - pkLastMsgRef.current < 12000) return;
+      if (pkRecoverRef.current >= 3) {
+        // Three rebuilds in a row still produced nothing: stop pretending the
+        // stream works and keep transcribing through the chunk pipeline.
+        parakeetActiveRef.current = false;
+        try { live.close(); } catch {}
+        if (wsRef.current === live) wsRef.current = null;
+        if (!runningRef.current) return;
+        console.warn("[ovio] Parakeet stream keeps stalling — switching to Whisper chunking");
+        setActiveEngine("whisper-large");
+        lastTickRef.current = Date.now();
+        if (!tickerRef.current) tickerRef.current = setInterval(tick, 500);
+        return;
+      }
+      pkRecoverRef.current += 1;
+      pkLastMsgRef.current = Date.now();
+      console.warn("[ovio] Parakeet stream went quiet — restarting the stream");
+      parakeetActiveRef.current = false;
+      try { live.close(); } catch {}
+      if (wsRef.current === live) wsRef.current = null;
+      pkRestartRef.current?.().catch(() => {});
+    }, 2000);
   }, []);
 
   // Start the Parakeet sidecar stream. Returns true when the WS path is live.
@@ -141,10 +186,46 @@ export default function useTranscription() {
       if (!ws || lastErr) throw lastErr || new Error("Parakeet stream failed to connect");
       wsRef.current = ws;
 
+      // Attach the handlers BEFORE the first frame goes out. The sidecar
+      // answers "start" immediately, and those first messages used to be
+      // dropped because onmessage was assigned after the sends below.
+      pkLastMsgRef.current = Date.now();
+      ws.onmessage = (ev) => {
+        pkLastMsgRef.current = Date.now();
+        pkRecoverRef.current = 0;
+        let m;
+        try { m = JSON.parse(ev.data); } catch { return; }
+        if (m.type === "partial") {
+          if (runningRef.current) setInterim(m.text || "");
+        } else if (m.type === "final") {
+          if (runningRef.current) {
+            appendFinal(m.text);
+            setInterim("");
+          }
+        } else if (m.type === "error") {
+          console.warn("[ovio] parakeet stream error:", m.message);
+        }
+      };
+
+      ws.onclose = () => {
+        if (wsRef.current === ws) wsRef.current = null;
+        if (!parakeetActiveRef.current) return;
+        // Unexpected drop mid-session — fall back to the Whisper chunk path
+        // for everything recorded from this point on.
+        parakeetActiveRef.current = false;
+        if (!runningRef.current) return;
+        console.warn("[ovio] Parakeet stream closed — falling back to Whisper chunking");
+        setActiveEngine("whisper-large");
+        lastTickRef.current = Date.now();
+        if (!tickerRef.current) tickerRef.current = setInterval(tick, 500);
+      };
+
       ws.send(JSON.stringify({ type: "start" }));
       parakeetActiveRef.current = true;
+      pkRecoverRef.current = 0;
       setActiveEngine("parakeet");
       setEnginePending(false);
+      startParakeetWatchdog();
 
       // Audio captured while the sidecar was still booting sat on the Whisper
       // chunk buffer (the socket did not exist yet). Hand it to the stream
@@ -164,36 +245,6 @@ export default function useTranscription() {
         try { ws.send(chunk.buffer); } catch {}
       }
 
-      ws.onmessage = (ev) => {
-        let m;
-        try { m = JSON.parse(ev.data); } catch { return; }
-        if (m.type === "partial") {
-          if (runningRef.current) setInterim(m.text || "");
-        } else if (m.type === "final") {
-          if (runningRef.current) {
-            appendFinal(m.text);
-            setInterim("");
-          }
-        } else if (m.type === "error") {
-          console.warn("[ovio] parakeet stream error:", m.message);
-        }
-      };
-
-      ws.onclose = () => {
-        if (parakeetActiveRef.current) {
-          // Unexpected drop mid-session — fall back to the Whisper chunk path
-          // for everything recorded from this point on.
-          parakeetActiveRef.current = false;
-          wsRef.current = null;
-          if (runningRef.current) {
-            console.warn("[ovio] Parakeet stream closed — falling back to Whisper chunking");
-            setActiveEngine("whisper-large");
-            lastTickRef.current = Date.now();
-            tickerRef.current = setInterval(tick, 500);
-          }
-        }
-      };
-
       return true;
     } catch (err) {
       console.warn("[ovio] Parakeet unavailable, using Whisper:", err.message);
@@ -201,7 +252,11 @@ export default function useTranscription() {
       wsRef.current = null;
       return false;
     }
-  }, [appendFinal]);
+  }, [appendFinal, startParakeetWatchdog]);
+
+  // The watchdog lives inside tryStartParakeet's closure; give it a stable way
+  // to restart the stream without self-referencing the memoized callback.
+  pkRestartRef.current = tryStartParakeet;
 
   // Tell the sidecar to flush the tail of the session and wait for the final
   // text (the regular onmessage handler above appends it).
@@ -360,7 +415,15 @@ export default function useTranscription() {
     async (from, to) => {
       const ws = wsRef.current;
       if (to === "parakeet") {
-        if (parakeetActiveRef.current || (ws && ws.readyState === WebSocket.CONNECTING)) return;
+        // Only a genuinely live stream may veto a switch. The old check trusted
+        // parakeetActiveRef alone, so once a session had wedged with the flag
+        // still true, switching back to Parakeet did nothing at all — no
+        // reconnect, no ticker, no live text for the rest of the recording.
+        const live = !!ws && ws.readyState === WebSocket.OPEN;
+        if ((parakeetActiveRef.current && live) || (ws && ws.readyState === WebSocket.CONNECTING)) return;
+        if (ws) { try { ws.close(); } catch {} wsRef.current = null; }
+        parakeetActiveRef.current = false;
+        pkRecoverRef.current = 0;
         // Whisper audio still parked in the buffer goes out through the old
         // chunk path so nothing recorded before the switch is lost.
         const tail = bufferRef.current;

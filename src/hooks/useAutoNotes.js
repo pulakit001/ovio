@@ -101,7 +101,10 @@ export default function useAutoNotes(transcript, isTranscribing) {
       setProgress(null);
       if (rerunRef.current) {
         rerunRef.current = false;
-        setImmediate(() => runRef.current());
+        // setTimeout, not setImmediate: the renderer runs without Node, so
+        // setImmediate is undefined there and threw out of this finally block —
+        // which left the notes panel stuck on "Generating" forever.
+        setTimeout(() => runRef.current(), 0);
       } else {
         setIsGenerating(false);
       }
