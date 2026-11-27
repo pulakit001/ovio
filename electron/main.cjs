@@ -224,6 +224,8 @@ app.whenReady().then(() => {
   ipcMain.handle("parakeet:status", () => parakeet.status());
   ipcMain.handle("parakeet:installEngine", () => parakeet.installEngine());
   ipcMain.handle("parakeet:downloadWeights", () => parakeet.downloadWeights());
+  // One press for the whole Parakeet install (engine + weights).
+  ipcMain.handle("parakeet:setup", () => parakeet.setup());
   ipcMain.handle("parakeet:ensureServer", () => parakeet.ensureServer());
   ipcMain.handle("parakeet:transcribeFile", (_event, filePath) => parakeet.transcribeFile(filePath));
 

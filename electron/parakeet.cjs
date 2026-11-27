@@ -350,6 +350,21 @@ function downloadWeights() {
   return weights.inflight;
 }
 
+// One-press setup. Parakeet needs two separate downloads — the Python engine
+// (venv + NeMo, 5–15 min) and the ~2.5 GB model file — and the UI used to
+// reveal them one after the other, so people had to press a second button
+// before their model finished installing. They don't depend on each other, so
+// start both at once and answer with one result when the pair is done.
+async function setup() {
+  const [engineResult, weightsResult] = await Promise.allSettled([
+    installEngine(),
+    downloadWeights(),
+  ]);
+  if (engineResult.status === "rejected") throw engineResult.reason;
+  if (weightsResult.status === "rejected") throw weightsResult.reason;
+  return { ok: true };
+}
+
 // ---------------------------------------------------------------------------
 // Sidecar server lifecycle
 // ---------------------------------------------------------------------------
@@ -511,6 +526,7 @@ module.exports = {
   weightsDownloaded,
   installEngine,
   downloadWeights,
+  setup,
   ensureServer,
   stopServer,
   transcribeFile,

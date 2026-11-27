@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     status: () => ipcRenderer.invoke("parakeet:status"),
     installEngine: () => ipcRenderer.invoke("parakeet:installEngine"),
     downloadWeights: () => ipcRenderer.invoke("parakeet:downloadWeights"),
+    // Single press: engine install + model download together.
+    setup: () => ipcRenderer.invoke("parakeet:setup"),
     ensureServer: () => ipcRenderer.invoke("parakeet:ensureServer"),
     transcribeFile: (filePath) => ipcRenderer.invoke("parakeet:transcribeFile", filePath),
     onStatus: (cb) => {

@@ -306,11 +306,16 @@ export default function Settings({ onNavigate, mode, setMode, localSttModel, set
     const off = window.electronAPI.parakeetAPI.onStatus((st) => setParakeetStatus(st));
     return off;
   }, []);
-  const startParakeetInstall = () => {
-    window.electronAPI?.parakeetAPI?.installEngine?.().then(refreshModelStatus).catch(refreshModelStatus);
-  };
-  const startParakeetDownload = () => {
-    window.electronAPI?.parakeetAPI?.downloadWeights?.().then(refreshModelStatus).catch(refreshModelStatus);
+  // One press for the whole install: the engine and the model file are two
+  // separate downloads, and asking for them in sequence made people press
+  // "download" twice before Parakeet was usable.
+  const startParakeetSetup = () => {
+    const api = window.electronAPI?.parakeetAPI;
+    if (!api) return;
+    const run = api.setup
+      ? api.setup()
+      : Promise.allSettled([api.installEngine?.(), api.downloadWeights?.()]);
+    run.then(refreshModelStatus).catch(refreshModelStatus);
   };
 
   // Settings is a tab now: every change persists immediately (each control
@@ -451,23 +456,20 @@ export default function Settings({ onNavigate, mode, setMode, localSttModel, set
                           : "Streams live · ~2.5 GB",
                         downloading || engineInstalling ? COLORS.textSecondary : engineError ? COLORS.red : COLORS.textTertiary,
                         engineError ? "Engine error"
+                          : downloading ? `Downloading… ${progress}%`
                           : engineInstalling ? "Installing engine… 5–15 min"
                           : !engineReady ? "Engine not installed"
-                          : downloading ? `Downloading… ${progress}%`
                           : downloaded ? (pk?.server?.running ? "Ready · streaming" : "Ready")
                           : `Not downloaded · ${pk?.sizeLabel || "~2.5 GB"}`,
                         () => setLocalSttModel("parakeet"),
                         null,
                       )}
-                      {(pkSelected && !engineReady && !engineInstalling) && (
+                      {pkSelected && !(engineReady && downloaded) && !downloading && !engineInstalling && (
                         <div style={{ fontSize: 11, color: COLORS.textSecondary, padding: "0 2px" }}>
-                          <TextAction onClick={startParakeetInstall}>Install engine</TextAction>
-                          <span style={{ color: COLORS.textTertiary }}> · one-time, ~5–15 min</span>
-                        </div>
-                      )}
-                      {(pkSelected && engineReady && !downloaded && !downloading) && (
-                        <div style={{ fontSize: 11, color: COLORS.textSecondary, padding: "0 2px" }}>
-                          <TextAction onClick={startParakeetDownload}>Download {pk?.sizeLabel || "~2.5 GB"}</TextAction>
+                          <TextAction onClick={startParakeetSetup}>
+                            {engineError ? "Try again" : engineReady ? `Download ${pk?.sizeLabel || "~2.5 GB"}` : "Set up Parakeet"}
+                          </TextAction>
+                          <span style={{ color: COLORS.textTertiary }}> · one-time, engine + model</span>
                         </div>
                       )}
                       {downloading && (

@@ -47,8 +47,12 @@ export default function Onboarding({ onComplete, onSkip }) {
   const busyParakeet = parakeet?.engine?.state === "installing" || parakeet?.weights?.downloading;
   const readyParakeet = engineReady && weightsReady;
   const startParakeet = () => {
-    window.electronAPI?.parakeetAPI?.installEngine?.().catch(() => {});
-    window.electronAPI?.parakeetAPI?.downloadWeights?.().catch(() => {});
+    const api = window.electronAPI?.parakeetAPI;
+    if (!api) return;
+    const run = api.setup
+      ? api.setup()
+      : Promise.allSettled([api.installEngine?.(), api.downloadWeights?.()]);
+    run.catch(() => {});
   };
   const startModel = () => window.electronAPI?.localLlm?.download?.(model).then(refreshModels).catch(refreshModels);
   const finish = async () => {
@@ -181,7 +185,7 @@ export default function Onboarding({ onComplete, onSkip }) {
               </div>
             </div>
             {parakeet?.weights?.downloading && <div className="ovio-setup-bar"><i style={{ width: `${Math.round((parakeet.weights.progress || 0) * 100)}%` }} /></div>}
-            {!readyParakeet && !busyParakeet && <button className="ovio-setup-download" onClick={startParakeet}>Install Parakeet</button>}
+            {!readyParakeet && !busyParakeet && <button className="ovio-setup-download" onClick={startParakeet}>Set up Parakeet</button>}
             {busyParakeet && <p className="ovio-setup-note">Keep Ovio open while this runs. You can continue setup now.</p>}
           </>}
 

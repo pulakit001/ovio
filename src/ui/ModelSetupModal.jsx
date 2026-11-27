@@ -74,9 +74,15 @@ export function useLocalModelSetup() {
             ? "idle-weights"
             : "idle-engine";
 
+  // Engine + model in one press. They are two separate downloads, and asking
+  // for them one after the other meant pressing "download" twice before the
+  // model was usable. Newer preloads expose setup(); fall back for old ones.
   const start = () => {
-    api?.installEngine?.().catch(() => {});
-    api?.downloadWeights?.().catch(() => {});
+    if (!api) return;
+    const run = api.setup
+      ? api.setup()
+      : Promise.allSettled([api.installEngine?.(), api.downloadWeights?.()]);
+    run.catch(() => {});
   };
 
   return {
@@ -107,15 +113,15 @@ const COPY = {
   },
   engine: {
     title: "Getting your model ready",
-    body: "Ovio is installing its local transcription engine. The model download starts right after.",
+    body: "Ovio is installing its local transcription engine and pulling the model file at the same time, so this needs just one press.",
   },
   "idle-weights": {
-    title: "One download left",
-    body: "The engine is in place. Parakeet-TDT v3 still needs its model file before it can hear anything.",
+    title: "The model file is missing",
+    body: "The engine is already in place. Parakeet-TDT v3 still needs its model file before it can hear anything — one press starts that download.",
   },
   "idle-engine": {
-    title: "Parakeet isn’t installed yet",
-    body: "Local transcription needs a one-time engine install plus the model file. Start it here and record as soon as it finishes.",
+    title: "Parakeet isn’t set up yet",
+    body: "One press installs the local engine and downloads the 2.5 GB model together. Recording turns on when both finish.",
   },
   error: {
     title: "The local engine hit a problem",
@@ -162,7 +168,7 @@ export function ModelSetupModal({ setup, onClose, onReady }) {
   }, [onClose]);
 
   const stepLabel = setup.stage === "weights"
-    ? "Downloading the model"
+    ? (setup.engineInstalling ? "Downloading the model · engine installing" : "Downloading the model")
     : setup.stage === "engine"
       ? setup.engineStep === "packages"
         ? "Installing Python packages"
@@ -184,7 +190,14 @@ export function ModelSetupModal({ setup, onClose, onReady }) {
   const primary = setup.stage === "ready"
     ? { label: "Start recording", onClick: () => onReady?.() }
     : setup.stage === "error" || setup.stage === "idle-engine" || setup.stage === "idle-weights"
-      ? { label: setup.stage === "error" ? "Try again" : "Start download", onClick: setup.start }
+      ? {
+          label: setup.stage === "error"
+            ? "Try again"
+            : setup.stage === "idle-weights"
+              ? "Download model"
+              : "Set up Parakeet",
+          onClick: setup.start,
+        }
       : null;
 
   return createPortal(
