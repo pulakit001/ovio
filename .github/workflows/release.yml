@@ -87,6 +87,28 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # The Homebrew cask is what the website's install command resolves, so it
+      # has to name this release or new users get the previous build. It was
+      # left behind once (cask 1.3.7 while 1.4.x shipped), so bump it here.
+      # Uploads already succeeded by now, hence continue-on-error: a push
+      # problem must not fail an otherwise published release.
+      - name: Point the Homebrew cask at this release
+        continue-on-error: true
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          node scripts/update-cask.cjs "$VERSION" release
+          if git diff --quiet -- Casks/ovio.rb; then
+            echo "Casks/ovio.rb already points at $VERSION."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/ovio.rb
+          git commit -m "Point the Homebrew cask at Ovio $VERSION"
+          git fetch origin main
+          git rebase origin/main || git rebase --abort
+          git push origin HEAD:main
+
   release-windows:
     runs-on: windows-latest
     steps:
