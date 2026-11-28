@@ -33,7 +33,7 @@ It listens through your microphone, which makes it good for in-person meetings, 
 - **Ask your old meetings anything.** Type "what did we decide about pricing?" and Ovio answers from your recordings and shows which ones it used.
 - **Files live next to your recordings.** Every folder has a vault for the PDFs, docs and images that go with that meeting.
 
-![AI notes beside a live recording](assets/screenshot-ai-notes.png)
+![A recording open in the Recorder](assets/screenshot-recorder.png)
 
 ## Install
 
@@ -93,7 +93,7 @@ The top pill has the four places you need: **Dashboard** for stats, projects and
 
 Recordings live in projects, and projects hold folders. The General Folder is the inbox for quick takes.
 
-![Vault and project files](assets/screenshot-vault.png)
+![Vault with the files attached to a folder](assets/screenshot-vault.png)
 
 ## Privacy
 
