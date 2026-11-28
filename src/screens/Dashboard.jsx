@@ -7,6 +7,7 @@ import {
   Inbox,
   Mic,
   Pencil,
+  Plus,
   Sparkles,
   X,
 } from "lucide-react";
@@ -206,6 +207,48 @@ const DASH_CSS = `
   transition: border-color 160ms ease;
 }
 .library-project-rename:focus { border-color: var(--ovio-text); }
+.library-new-card { border-style: dashed; background: transparent; }
+.library-new-card:hover { background: var(--ovio-surface); }
+.library-new-card:focus-visible { outline: 2px solid var(--ovio-text); outline-offset: 3px; }
+.library-new-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 26px 20px;
+  text-align: center;
+}
+.library-new-badge {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px dashed var(--ovio-border-strong);
+  transition: border-color 160ms ease, background 160ms ease;
+}
+.library-new-card:hover .library-new-badge { border-color: var(--ovio-text); background: var(--ovio-surface2); }
+.library-new-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 9px;
+  border: 1px solid var(--ovio-border);
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 560;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, transform 180ms cubic-bezier(.16,1,.3,1);
+}
+.library-new-cta:hover { border-color: var(--ovio-border-strong); background: var(--ovio-surface2); }
+.library-new-cta:active { transform: scale(0.97); }
+.library-new-cta:focus-visible { outline: 2px solid var(--ovio-text); outline-offset: 2px; }
 .library-folder-card {
   background: var(--ovio-surface);
   border: 1px solid var(--ovio-border);
@@ -457,6 +500,91 @@ function ProjectCard({ project, index, onOpen, onRename, general = false }) {
         <AudioLines size={13} style={{ flexShrink: 0 }} />
         <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{formatLatest(project.latest)}</span>
       </div>
+    </div>
+  );
+}
+
+// Creating a project belongs on the home screen: people land here, see their
+// projects, and previously had to open the Recorder just to make one.
+function NewProjectCard({ index, creating, onRequest, onCancel, onCreate }) {
+  const [draft, setDraft] = useState("");
+  const inputRef = useRef(null);
+  const cardRef = useRef(null);
+
+  useEffect(() => {
+    if (!creating) return;
+    // The card sits at the end of the grid, so pull it into view when the
+    // header button starts the flow.
+    cardRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    inputRef.current?.focus();
+  }, [creating]);
+
+  const commit = () => {
+    const clean = draft.trim();
+    setDraft("");
+    if (clean) onCreate?.(clean);
+    else onCancel?.();
+  };
+
+  return (
+    <div
+      ref={cardRef}
+      role={creating ? undefined : "button"}
+      tabIndex={creating ? -1 : 0}
+      aria-label="Create a project"
+      className="library-project-card library-new-card"
+      onClick={() => { if (!creating) onRequest?.(); }}
+      onKeyDown={(event) => {
+        if (creating) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onRequest?.();
+        }
+      }}
+      style={{ animation: `ovioLibraryEnter 500ms cubic-bezier(.16,1,.3,1) ${70 + index * 45}ms both` }}
+    >
+      {creating ? (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 10, padding: "26px 20px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: COLORS.textTertiary }}>
+            New project
+          </div>
+          <input
+            ref={inputRef}
+            className="library-project-rename"
+            value={draft}
+            maxLength={60}
+            placeholder="Project name"
+            aria-label="New project name"
+            onChange={(event) => setDraft(event.target.value)}
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              event.stopPropagation();
+              if (event.key === "Enter") {
+                event.preventDefault();
+                commit();
+              } else if (event.key === "Escape") {
+                event.preventDefault();
+                setDraft("");
+                onCancel?.();
+              }
+            }}
+            onBlur={commit}
+          />
+          <div style={{ color: COLORS.textTertiary, fontSize: 11.5, lineHeight: 1.5 }}>
+            Enter to create, Esc to cancel
+          </div>
+        </div>
+      ) : (
+        <div className="library-new-card-body">
+          <span className="library-new-badge" style={{ color: COLORS.textSecondary }}>
+            <Plus size={18} strokeWidth={1.9} />
+          </span>
+          <div style={{ color: COLORS.textSecondary, fontSize: 13, fontWeight: 560 }}>New project</div>
+          <div style={{ color: COLORS.textTertiary, fontSize: 11.5, lineHeight: 1.5, maxWidth: 200 }}>
+            Group meetings, classes or clients in one place
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -969,10 +1097,12 @@ export default function Dashboard({
   onSelectRecording,
   onNavigateToProject,
   onRenameProject,
+  onCreateProject,
   onOpenRecorder,
   onOpenSearch,
   onNavigate,
 }) {
+  const [creatingProject, setCreatingProject] = useState(false);
   const library = useMemo(
     () => projects
       .filter((project) => project.id !== GENERAL_PROJECT_ID)
@@ -1067,9 +1197,19 @@ export default function Dashboard({
             <h2 style={{ margin: 0, color: COLORS.text, fontSize: 20, fontWeight: 600, letterSpacing: "-0.02em" }}>
               Your projects
             </h2>
-            <span style={{ color: COLORS.textTertiary, fontSize: 12.5, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-              {plural(library.length, "project")} · {plural(recordingCount, "recording")}
-            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span style={{ color: COLORS.textTertiary, fontSize: 12.5, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                {plural(library.length, "project")} · {plural(recordingCount, "recording")}
+              </span>
+              <button
+                type="button"
+                className="library-new-cta"
+                onClick={() => setCreatingProject(true)}
+                style={{ color: COLORS.textSecondary }}
+              >
+                <Plus size={13} /> New project
+              </button>
+            </div>
           </div>
           <div className="library-project-grid" data-tour="projects">
             <ProjectCard
@@ -1087,10 +1227,20 @@ export default function Dashboard({
                 onOpen={() => openProject(project)}
               />
             ))}
+            <NewProjectCard
+              index={library.length + 1}
+              creating={creatingProject}
+              onRequest={() => setCreatingProject(true)}
+              onCancel={() => setCreatingProject(false)}
+              onCreate={(name) => {
+                onCreateProject?.(name);
+                setCreatingProject(false);
+              }}
+            />
           </div>
           {library.length === 0 && generalRecordings.length === 0 && (
             <div style={{ color: COLORS.textTertiary, fontSize: 12.5, marginTop: 18 }}>
-              Start a recording to build your library.
+              Create a project above, or start a recording to build your library.
             </div>
           )}
         </div>

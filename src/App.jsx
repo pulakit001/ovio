@@ -497,6 +497,11 @@ button:focus-visible { outline: 2px solid rgba(198,245,95,0.42); outline-offset:
               onRenameProject={(pid, name) => {
                 setProjects((prev) => prev.map((p) => (p.id === pid ? { ...p, name } : p)));
               }}
+              onCreateProject={(name) => {
+                const clean = String(name || "").trim();
+                if (!clean) return;
+                setProjects((prev) => [...prev, { id: genId(), name: clean, subprojects: [] }]);
+              }}
               onSelectRecording={(pid, sid, rec) => {
                 setNavProjectId(pid);
                 setNavSubprojectId(sid);
