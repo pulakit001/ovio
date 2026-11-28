@@ -1,12 +1,12 @@
 cask "ovio" do
-  version "1.4.9"
+  version "1.4.10"
 
   on_arm do
-    sha256 "e42ecac655fab3753028b392d58993195da0cb8463e09cb1852f3fcfecb16bd1"
+    sha256 "b85c56b477f17b54992616d12a9c17dbb21aed25e78aa9470d063028c6ebcbf7"
     url "https://github.com/pulakit001/ovio/releases/download/v#{version}/Ovio-mac-arm64.dmg"
   end
   on_intel do
-    sha256 "b7cdf3eebe51991bb0b2498583502a51b3556400424188359d6e2012df3d49cf"
+    sha256 "e6890b610a0d8f53e107e8cf57cc94706d2a6b541e474525fe07acb14b8e9336"
     url "https://github.com/pulakit001/ovio/releases/download/v#{version}/Ovio-mac-x64.dmg"
   end
 
