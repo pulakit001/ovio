@@ -14,6 +14,8 @@ On your own laptop. No account, no cloud.
 
 macOS · Windows · Linux
 
+[Website](https://get-ovio.vercel.app)
+
 </div>
 
 ![Ovio dashboard](assets/screenshot-dashboard.png)
@@ -37,7 +39,7 @@ It listens through your microphone, which makes it good for in-person meetings, 
 
 ## Install
 
-Grab the latest build from [Releases](https://github.com/pulakit001/ovio/releases/latest).
+Grab the latest build from [Releases](https://github.com/pulakit001/ovio/releases/latest), or read more at [get-ovio.vercel.app](https://get-ovio.vercel.app).
 
 ### macOS 13 or newer
 
