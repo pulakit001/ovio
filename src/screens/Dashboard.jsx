@@ -207,30 +207,6 @@ const DASH_CSS = `
   transition: border-color 160ms ease;
 }
 .library-project-rename:focus { border-color: var(--ovio-text); }
-.library-new-card { border-style: dashed; background: transparent; }
-.library-new-card:hover { background: var(--ovio-surface); }
-.library-new-card:focus-visible { outline: 2px solid var(--ovio-text); outline-offset: 3px; }
-.library-new-card-body {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 26px 20px;
-  text-align: center;
-}
-.library-new-badge {
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 12px;
-  border: 1px dashed var(--ovio-border-strong);
-  transition: border-color 160ms ease, background 160ms ease;
-}
-.library-new-card:hover .library-new-badge { border-color: var(--ovio-text); background: var(--ovio-surface2); }
 .library-new-cta {
   display: inline-flex;
   align-items: center;
@@ -249,6 +225,21 @@ const DASH_CSS = `
 .library-new-cta:hover { border-color: var(--ovio-border-strong); background: var(--ovio-surface2); }
 .library-new-cta:active { transform: scale(0.97); }
 .library-new-cta:focus-visible { outline: 2px solid var(--ovio-text); outline-offset: 2px; }
+.library-new-input {
+  width: 190px;
+  height: 30px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  border-radius: 9px;
+  border: 1px solid var(--ovio-text);
+  background: var(--ovio-surface2);
+  color: var(--ovio-text);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 520;
+  outline: none;
+}
+.library-new-input::placeholder { color: var(--ovio-text); opacity: 0.42; }
 .library-folder-card {
   background: var(--ovio-surface);
   border: 1px solid var(--ovio-border);
@@ -500,91 +491,6 @@ function ProjectCard({ project, index, onOpen, onRename, general = false }) {
         <AudioLines size={13} style={{ flexShrink: 0 }} />
         <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{formatLatest(project.latest)}</span>
       </div>
-    </div>
-  );
-}
-
-// Creating a project belongs on the home screen: people land here, see their
-// projects, and previously had to open the Recorder just to make one.
-function NewProjectCard({ index, creating, onRequest, onCancel, onCreate }) {
-  const [draft, setDraft] = useState("");
-  const inputRef = useRef(null);
-  const cardRef = useRef(null);
-
-  useEffect(() => {
-    if (!creating) return;
-    // The card sits at the end of the grid, so pull it into view when the
-    // header button starts the flow.
-    cardRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-    inputRef.current?.focus();
-  }, [creating]);
-
-  const commit = () => {
-    const clean = draft.trim();
-    setDraft("");
-    if (clean) onCreate?.(clean);
-    else onCancel?.();
-  };
-
-  return (
-    <div
-      ref={cardRef}
-      role={creating ? undefined : "button"}
-      tabIndex={creating ? -1 : 0}
-      aria-label="Create a project"
-      className="library-project-card library-new-card"
-      onClick={() => { if (!creating) onRequest?.(); }}
-      onKeyDown={(event) => {
-        if (creating) return;
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onRequest?.();
-        }
-      }}
-      style={{ animation: `ovioLibraryEnter 500ms cubic-bezier(.16,1,.3,1) ${70 + index * 45}ms both` }}
-    >
-      {creating ? (
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 10, padding: "26px 20px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: COLORS.textTertiary }}>
-            New project
-          </div>
-          <input
-            ref={inputRef}
-            className="library-project-rename"
-            value={draft}
-            maxLength={60}
-            placeholder="Project name"
-            aria-label="New project name"
-            onChange={(event) => setDraft(event.target.value)}
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => {
-              event.stopPropagation();
-              if (event.key === "Enter") {
-                event.preventDefault();
-                commit();
-              } else if (event.key === "Escape") {
-                event.preventDefault();
-                setDraft("");
-                onCancel?.();
-              }
-            }}
-            onBlur={commit}
-          />
-          <div style={{ color: COLORS.textTertiary, fontSize: 11.5, lineHeight: 1.5 }}>
-            Enter to create, Esc to cancel
-          </div>
-        </div>
-      ) : (
-        <div className="library-new-card-body">
-          <span className="library-new-badge" style={{ color: COLORS.textSecondary }}>
-            <Plus size={18} strokeWidth={1.9} />
-          </span>
-          <div style={{ color: COLORS.textSecondary, fontSize: 13, fontWeight: 560 }}>New project</div>
-          <div style={{ color: COLORS.textTertiary, fontSize: 11.5, lineHeight: 1.5, maxWidth: 200 }}>
-            Group meetings, classes or clients in one place
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -1103,6 +1009,7 @@ export default function Dashboard({
   onNavigate,
 }) {
   const [creatingProject, setCreatingProject] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
   const library = useMemo(
     () => projects
       .filter((project) => project.id !== GENERAL_PROJECT_ID)
@@ -1164,6 +1071,13 @@ export default function Dashboard({
   // the folder tree, the live stage and the search/move tools already.
   const openProject = (project) => onNavigateToProject(project.id, null);
 
+  const commitNewProject = () => {
+    const clean = newProjectName.trim();
+    setNewProjectName("");
+    setCreatingProject(false);
+    if (clean) onCreateProject?.(clean);
+  };
+
   const actions = (
     <PrimaryButton onClick={onOpenRecorder} style={{ padding: "11px 17px", fontSize: 13 }}>
       <Mic size={14} /> Record
@@ -1201,14 +1115,37 @@ export default function Dashboard({
               <span style={{ color: COLORS.textTertiary, fontSize: 12.5, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
                 {plural(library.length, "project")} · {plural(recordingCount, "recording")}
               </span>
-              <button
-                type="button"
-                className="library-new-cta"
-                onClick={() => setCreatingProject(true)}
-                style={{ color: COLORS.textSecondary }}
-              >
-                <Plus size={13} /> New project
-              </button>
+              {creatingProject ? (
+                <input
+                  className="library-new-input"
+                  value={newProjectName}
+                  maxLength={60}
+                  placeholder="Project name"
+                  aria-label="New project name"
+                  autoFocus
+                  onChange={(event) => setNewProjectName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      commitNewProject();
+                    } else if (event.key === "Escape") {
+                      event.preventDefault();
+                      setNewProjectName("");
+                      setCreatingProject(false);
+                    }
+                  }}
+                  onBlur={commitNewProject}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="library-new-cta"
+                  onClick={() => setCreatingProject(true)}
+                  style={{ color: COLORS.textSecondary }}
+                >
+                  <Plus size={13} /> New project
+                </button>
+              )}
             </div>
           </div>
           <div className="library-project-grid" data-tour="projects">
@@ -1227,16 +1164,6 @@ export default function Dashboard({
                 onOpen={() => openProject(project)}
               />
             ))}
-            <NewProjectCard
-              index={library.length + 1}
-              creating={creatingProject}
-              onRequest={() => setCreatingProject(true)}
-              onCancel={() => setCreatingProject(false)}
-              onCreate={(name) => {
-                onCreateProject?.(name);
-                setCreatingProject(false);
-              }}
-            />
           </div>
           {library.length === 0 && generalRecordings.length === 0 && (
             <div style={{ color: COLORS.textTertiary, fontSize: 12.5, marginTop: 18 }}>
